@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_AchsGrdfkt" Id="{f659492b-04d9-413a-9e2f-ff5aca919029}">
+    <Declaration><![CDATA[TYPE ST_AchsGrdfkt :
+STRUCT	
+	// Achs-Grundfunktion
+	bRefrzSensor	:BOOL;	// Hardwaresensoreingang. Wird intern auf das ControlWord.5 geschrieben
+
+	fIstSetzwert	:LREAL;	// Encoderwert auf den der Encoder gesetzt werden soll. Wird durch bIstw_setz angestoßen und bIstw_gesetz abgefragt.
+
+	bRefrz_ausf		:BOOL;	// Referenzfahrt soll ausgeführt werden. Dafür muss die Vorschubfreigabe gesetzt sein.
+	bRefrz_ausgf	:BOOL;	// Referenzfahrt wurde erfolgreich ausgeführt. Nur TRUE, wenn auch bRefrz_ausf TRUE ist
+	bIstw_setz		:BOOL;	// Encoderwert wird absolut gesetzt. Reglerfreigabe muss dafür aus sein.
+	bIstw_gesetz	:BOOL;	// Encoderwert wurde erfolgreich gesetzt. Nur TRUE, wenn bIstw_setz auch TRUE ist.
+	bHdfkt_pos		:BOOL;	// Handfunktion (MC-Jog) positiv fahren. Nur mit Vorschubfreigabe. Wird von den Uni-Bausteinen beschrieben/überschrieben
+	bHdfkt_neg		:BOOL;	// Handfunktion (MC-Jog) negativ fahren. Nur mit Vorschubfreigabe. Wird von den Uni-Bausteinen beschrieben/überschrieben
+	bReset_ausf		:BOOL;	// NC-Reset wird ausgeführt. IQ_stAchse.stEinAusG.Q_nSignalsteuerwort.0 für Bosch-Servos wird beschrieben für einen Hardware-Reset.
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>
