@@ -1,0 +1,109 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_ParamSKSServoschrauber" Id="{f131dcac-0327-4ea4-9b70-4dcc6c55f04b}">
+    <Declaration><![CDATA[{attribute 'pack_mode' := '1'}
+TYPE ST_ParamSKSServoschrauber :
+STRUCT	
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Anwahl Schrauber Log'}
+{attribute 'MaschPara.Type' := ''}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'}   
+	bLogAnwahl						:BOOL;	
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Zeitdauer Zustellhub Schrauber '}
+{attribute 'MaschPara.Type' := 'ms'}
+{attribute 'MaschPara.Min' := '0'}
+{attribute 'MaschPara.Max' := '5000'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'}   
+	tParam_ZeitdZustellhubSchr	:TIME;
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Zeitdauer Schrauberhub Schrauber '}
+{attribute 'MaschPara.Type' := 'ms'}
+{attribute 'MaschPara.Min' := '0'}
+{attribute 'MaschPara.Max' := '5000'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'}   
+	tParam_ZeitdSchraubhubSchr	:TIME;
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Zeitdauer Laufzeitfehler Auswurfhub Schrauber '}
+{attribute 'MaschPara.Type' := 'ms'}
+{attribute 'MaschPara.Min' := '0'}
+{attribute 'MaschPara.Max' := '5000'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'}   
+	tParam_ZeitdAuswurfSchr	:TIME;
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Zeitdauer Laufzeitfehler Schraubtakt Schrauber '}
+{attribute 'MaschPara.Type' := 'ms'}
+{attribute 'MaschPara.Min' := '0'}
+{attribute 'MaschPara.Max' := '5000'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'}   
+	tParam_ZeitdSchraubTakt	:TIME;
+
+
+
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Solltiefe der Schrauberspitze beim Schrauben'}
+{attribute 'MaschPara.Type' := 'mm im Bezug auf die Schrauberspitze'}
+{attribute 'MaschPara.Min' := '-10'}
+{attribute 'MaschPara.Max' := '10'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'} 
+	fParam_Sollschraubtiefe						:LREAL;
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Solltiefe der Schrauberspitze beim Schrauben (Herdumbau)'}
+{attribute 'MaschPara.Type' := 'mm im Bezug auf die Schrauberspitze'}
+{attribute 'MaschPara.Min' := '0'}
+{attribute 'MaschPara.Max' := '15'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'} 
+	fParam_SollschraubtiefeHerdumbau						:LREAL;	
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Umschalttiefe ab der der Schrauber langsam dreht'}
+{attribute 'MaschPara.Type' := 'mm im Bezug auf die Schrauberspitze''}
+{attribute 'MaschPara.Min' := '-10'}
+{attribute 'MaschPara.Max' := '100'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'} 
+	fParam_Umschalttiefe						:LREAL;
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Tiefe ab der der Schrauber auf Solldrehzahl umschaltet'}
+{attribute 'MaschPara.Type' := 'mm im Bezug auf die Schrauberspitze''}
+{attribute 'MaschPara.Min' := '-10'}
+{attribute 'MaschPara.Max' := '100'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'} 
+   fSchraubTiefeSollDrehzahl			 	:LREAL;
+	
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Sollmoment des Antriebes beim Schrauben'}
+{attribute 'MaschPara.Type' := 'Nm'}
+{attribute 'MaschPara.Min' := '-10'}
+{attribute 'MaschPara.Max' := '100'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'} 
+	fParam_Sollmoment			:LREAL;
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Solldrehzahl des Antriebes beim Schrauben'}
+{attribute 'MaschPara.Type' := '% des max. Antriebsdrehzahl'}
+{attribute 'MaschPara.Min' := '-10'}
+{attribute 'MaschPara.Max' := '100'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'} 
+	fParam_Solldrehzahl	:LREAL;	
+{attribute 'MaschPara.GroupName' := 'Preset.Konstant'}
+{attribute 'MaschPara.Name' := 'Drehzahl beim Start des Schraubvorgangs'}
+{attribute 'MaschPara.Type' := '% des max. Antriebsdrehzahl'}
+{attribute 'MaschPara.Min' := '-10'}
+{attribute 'MaschPara.Max' := '100'}
+{attribute 'MaschPara.Info' := ''}
+{attribute 'MaschPara.TreeViewLayer' := '-1'} 
+	fStartDrehzahl	:LREAL;	
+
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

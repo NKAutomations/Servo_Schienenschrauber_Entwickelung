@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_StepHistory" Id="{77d0446c-592f-4935-b636-9f3bfa8fda26}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_StepHistory
+VAR CONSTANT
+	cMaxStepHistory	:INT	:=	50;
+END_VAR
+VAR_INPUT
+	I_nStep				:INT;
+END_VAR
+VAR
+	n						:INT;
+	arrStepHistory		:ARRAY[1..cMaxStepHistory] OF STRING(21);
+	nOldHistoryStep	:INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	(***********************************************************************)
+	IF	I_nStep <> nOldHistoryStep
+	THEN
+		FOR n := cMaxStepHistory-1  TO 1 BY -1
+		DO
+			arrStepHistory[n+1] 	:=	arrStepHistory[n];
+		END_FOR
+
+		arrStepHistory[1]		:=	INT_TO_STRING(I_nStep);
+		FOR n := 5-LEN(arrStepHistory[1]) TO 1 BY -1
+		DO
+			arrStepHistory[1] := CONCAT(' ', arrStepHistory[1]);
+		END_FOR
+		arrStepHistory[1] := CONCAT(arrStepHistory[1], ' - ');
+		arrStepHistory[1] := CONCAT(arrStepHistory[1], RIGHT(prgMAIN.fbZeitstempel.Q_objTimestamp.sQ, 12));
+
+	END_IF
+
+	nOldHistoryStep := I_nStep;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_StepHistory">
+      <LineId Id="3" Count="17" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

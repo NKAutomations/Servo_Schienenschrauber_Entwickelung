@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_NcAchsen" Id="{010bc002-0f5e-4baa-bf82-50db19c0713f}">
+    <Declaration><![CDATA[TYPE ST_NcAchsen :
+STRUCT
+	nAxNr				:INT;	// RO Achsnummer im Systemmanager
+	sAxName			:STRING(31);	// RO NC-Achsname aus dem Systemmanager
+
+	bNcFehler		:BOOL;	// RO NC hat einen Fehler
+	nFehlerNr		:UDINT;	// RO NC Fehlernummer
+	bBetrbBer		:BOOL;	// RO NC-Achse ist Betriebsbereit. Quasi das Häckchen. (direkt aus AXISREF.Status.Operational)
+	bHwFehler		:BOOL;	// RO Umrichter ist nach Freigabe des Schutzbereiches für 5s nicht Betriebsbereit.
+
+	fPosIstwert		:LREAL;	// RO Aktuelle Position (direkt aus AXISREF.NcToPlc.ActPos)
+	fVeloIstwert	:LREAL;	// RO Aktuelle Geschwindigkeit (direkt aus AXISREF.NcToPlc.ActVelo)
+	fModIstwert		:LREAL;	// RO Aktueller Modulowert (direkt aus AXISREF.NcToPlc.ModuloActPos)
+
+	fAuftrOverride	:LREAL;	// RO Aktueller Override für den Fahrauftrag
+
+	stStatus			:ST_AchsStatus;	// Achs-Status
+	stParam			:ST_AchsParam;		// Achs-Parameter
+	stFreigb			:ST_AchsFreigb;	// Achs-Freigaben
+	stGrdfkt			:ST_AchsGrdfkt;	// Achs-Grundfunktionen
+	stKoppln			:ST_AchsKoppln;	// Achs-Koppelfunktionen
+	stAuftrg			:ST_AchsAuftrg;	// Achs-Fahrauftrag
+	stMeldg			:ST_AchsMeldg;		// Achs-Meldungen
+	
+	stEinAusG		:ST_AchsInOut;		// Achs Ein- und Ausgangsstruktur für Bosch-Rexroth-Servos
+
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

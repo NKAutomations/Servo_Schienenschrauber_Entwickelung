@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_AchsParam" Id="{9126fa26-6ce7-4b7b-8f95-d6855ce7da48}">
+    <Declaration><![CDATA[TYPE ST_AchsParam :
+STRUCT
+	// Achs-Parameter
+
+	bLesSchrFrg		:BOOL;	// bei steigender Flanke werden alle Parameter gelesen und geschrieben
+
+	bOhnSoftEndl	:BOOL;	// Softwareendlagen werden bei der Zielposition nicht überwacht.
+
+	fSoftEndlMin	:LREAL;	// RO aktuelle Softwareendlage
+	fSoftEndlMax	:LREAL;	// RO aktuelle Softwareendlage
+	bSoftEndlAkt	:BOOL;	// RO Softwareendlagen sind nicht aktiv
+	fEilgGeschw		:LREAL;	// RO Maximale Achsgeschwindigkeit. In mm oder ° Nicht in %
+
+	fEndlBegrMin	:LREAL;	// WO Softwareendlage min setzen
+	fEndlBegrMax	:LREAL;	// WO Softwareendlage max setzen
+
+	fPosVerrWert	:LREAL;	// Maschinen-Parameter. Wird auf die Zielposition aufaddiert. Das gleiche wie fPosOffsWert
+	fPosOffsWert	:LREAL;	// Maschinen-Parameter. Wird auf die Zielposition aufaddiert. Das gleiche wie fPosVerrWert
+	fGrdstlgPos		:LREAL;	// Maschinen-Parameter. Feste Zielposition bei dem Fahrauftrag arrPTP_start[cGrundPos]
+	fGeschwVorg		:LREAL;	// Maschinen-Parameter. Geschwindigkeit beim Bremse einschleifen und als Zwischenspeicher zu verwenden. Bei Fahraufträgen im AchsKtrlBaustein wird immer fPTP_Geschw genommen
+	fParkPos			:LREAL;	// Maschinen-Parameter. Nur ein Zwischenspeicher.
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

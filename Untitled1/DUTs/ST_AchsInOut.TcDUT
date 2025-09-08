@@ -1,0 +1,87 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_AchsInOut" Id="{764ca47a-b8c3-49e7-9a09-354f3de227d7}">
+    <Declaration><![CDATA[TYPE ST_AchsInOut :
+STRUCT
+	
+	// Eingänge
+	// #######################################################################
+	I_nEinspeiseStatusword			AT %I*: WORD;	(*S-0-01720.0.2
+										Bit 0 - 3 	-> reserviert
+										Bit 4			-> Netzspannung OK
+										Bit 5			-> Hardware bereit zum Einschalten
+										Bit 6			-> Zwischenkreis wird gerade geladen, oder ist geladen
+										Bit 8-9		-> Rückmeldung Betriebsart
+										Bit 10		-> Zwischenkreisentladung angewählt und Zwischenkreis spannungsfrei (< ca. 35 V)
+										Bit 11		-> Bremswiderstand aktiv
+										Bit 12		-> Warnung aktiv
+										Bit 13		-> Fehler aktiv
+										Bit 14		-> Bereit zur Freigabe: Netzschütz geschlossen, Zwischenkreis geladen. Die versorgten Achsen zeigen "bb".
+										Bit 15		-> Die Freigabe ist gegeben, d.h. der Zwischenkreis ist belastbar. Die versorgten Achsen können nach "Ab" geschaltet werden und die Antriebsfreigabe kann gesetzt werden.
+															Bei den Wechselrichtern XM* muss das Bit von der Steuerung beschrieben werden, wenn der Versorger bzw. der versorgenden Umrichter den Status "Freigabe" gesetzt hat.
+										*)
+
+	I_nDCStatusword					AT %I*: WORD;	(*P-0-0115
+										Bit 0 	 	-> Antrieb Betriebsbereit
+										Bit 1			-> Antrieb bereit zur Leistungsabgabe
+										Bit 2			-> Warnung (ZKL 2) steht an
+										Bit 3			-> Antrieb folgt (ext.) Sollwertvorgabe
+										Bit 4			-> Antrieb-Halt ist aktiv und Achse ist im Stillstand
+										Bit 5			-> Kommandozustand hat sich geändert
+										Bit 6			-> Antrieb folgt (int.) Sollwertvorgabe der SPS
+										Bit 7			-> Haupt- oder Nebenbetriebsart aktiv und Initialisierung abgeschlossen, sonst 0
+										Bit 8-11		-> Istbetriebsart 
+										Bit 12		-> Antrieb hat Sollwertvorgabe erreicht. (Die Bildung des Bit abhängig von der aktiven BA ist weiter unten beschrieben).
+										Bit 13		-> Antriebsfehler
+										Bit 14/15	-> 00: Steuer- / Leistungsteil nicht betriebsbereit z.B. Antriebsfehler oder Phase 2)
+															01: Steuerteil betriebsbereit (bb)
+															10: Steuer- und Leistungsteil betriebsbereit (Ab)
+															11: Antrieb momentenbehaftet (AF)
+
+										*)
+
+	I_nDigitaleEingaenge				AT %I*: DWORD;	// Hardwareeingänge von Bosch-Rexroth. Bit .3 und .4 sind die Hardwareendlagen 
+	I_nStatusHaltebremse				AT %I*: WORD;	
+	I_nStatusGehaltNennmoment		AT %I*: WORD;
+	I_nBetriebsstundenzaehler		AT %I*: UDINT;
+	I_nDiagnoseNummer					AT %I*: DWORD;
+	
+	I_nDrehmomentIstwert				AT %I*: INT;	// In 0,1%. Also 1000 ist 100%
+	
+	I_nSignalstatuswort				AT %I*: WORD;
+	
+	I_nZustandsklasse3				AT %I*: WORD;
+	
+	// Ausgänge
+	// #######################################################################
+	Q_nDrehmomentGrenzwert 			AT %Q*: INT;	// Drehmoment Grenzwert Bipolar in 0,1%. Also 1000 ist 100%
+
+	Q_nEinspeiseSteuerwort			AT %Q*: WORD;	(*S-0-01720.0.1
+										Bit 0 - 7 	-> reserviert
+										Bit 8-9		-> Betriebsartvorwahl
+										Bit 10		-> Funktion Zwischenkreisentladung starten
+										Bit 11		-> n.v.
+										Bit 12		-> Betätigung des versorgerintegrierten Betriebsbereitrelais, mit dem ein optionales Hauptschütz (vorgelagertes, zusätzliches Schaltelement) freigegeben werden kann.
+										Bit 13		-> Fehler aktiv
+										Bit 14		-> Zwischenkreis laden und Netzschütz einschalteten - Gerät geht in Gleichrichterbetrieb
+										Bit 15		-> Freigabe, Sollbetriebsart aktivieren -> Wirkt auf die IGBT-Brücke des Versorgungsgeräts, aktiviert die DC-Zwischenkreisspannungsregelung und die Sollbetriebsart
+										*)
+
+	Q_nDCPowerControl					AT %Q*: WORD;	(*S-0-0240
+										Bit 0 		->Der Zwischenkreis ist bereit zur Leistungsabgabe und -aufnahme (Achse meldet antriebsbereit "Ab")
+										*)
+
+	Q_nSignalsteuerwort				AT %Q*: WORD;	(*
+										Bit 0 - ReglerReset,
+										Bit 1 - Fahren auf Festanschlag
+										Bit 2 - Bremsentest ausführen
+										*)
+	
+	{attribute 'TcContextName':='Task_AchsFastStop'}
+	Q_bAchsNcAchsFastStop			AT %Q*: BOOL;	// Vorschlag für eine Variable verbunden mit dem Faststop aus der NC. Diese Variable hat den TcContextName: 'Task_AchsFastStop'. Dafür muss diese Task mit diesem Namen natürlich existieren.
+
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

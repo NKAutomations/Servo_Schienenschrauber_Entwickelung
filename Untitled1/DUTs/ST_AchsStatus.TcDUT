@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_AchsStatus" Id="{43f9e791-6fea-4e8c-b0bb-527251c1c4bc}">
+    <Declaration><![CDATA[TYPE ST_AchsStatus :
+STRUCT
+	// Achs-Status
+	bInReferz		:BOOL;	// RO Achse ist referenziert. Vorallem bei Eilschleichachsen wichtig. (direkt aus AXISREF.Status.Homed)
+	bInStillst		:BOOL;	// RO Achse steht. (direkt aus AXISREF.Status.NotMoving)
+	bFahrbewAkt		:BOOL;	// RO Achse wird bewegt (Encoder) oder bewegt sich selbst (Servo). (direkt aus AXISREF.Status.Moving)
+	bFaehrtPos		:BOOL;	// RO Achse wird bewegt (Encoder) oder bewegt sich selbst (Servo) positiv. (direkt aus AXISREF.Status.PositiveDirection)
+	bFaehrtNeg		:BOOL;	// RO Achse wird bewegt (Encoder) oder bewegt sich selbst (Servo) negativ. (direkt aus AXISREF.Status.NegativeDirection)
+	bKonstFahrt		:BOOL;	// RO Achse hat eine konstante Geschwindigkeit erreicht. (direkt aus AXISREF.Status.ConstantVelocity)
+	bZielPosErr		:BOOL;	// RO Achse hat ihre Zielposition erreicht. (Genauigkeit im Systemmanager angegeben) (direkt aus AXISREF.Status.InTargetPosition)
+	bZielBerErr		:BOOL;	// RO Achse hat ihr Zielfenster erreicht. (Genauigkeit im Systemmanager angegeben) (direkt aus AXISREF.Status.InPositionArea)
+	
+	bInGrundPos		:BOOL;	// WO Achse in Grundstellung. Muss selbst beschrieben werden
+
+	// Hardware-Status
+	bAchseBTB		:BOOL;	// RO Umrichterstatus. Wird im UniAchsAnstg, UniAntrAnstgSEW oder CtrlXGrupEinschalt gesetzt.
+	bFrgSchutzBer	:BOOL;	// WO Schutzbereich für diese Achse ist freigegeben. Wichtig für Ausgabe der Hardware-Fehler
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

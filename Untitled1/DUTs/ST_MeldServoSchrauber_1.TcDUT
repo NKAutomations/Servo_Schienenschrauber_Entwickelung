@@ -1,0 +1,97 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_MeldServoSchrauber_1" Id="{74c26029-a49a-40e7-a79e-08ee005c450c}">
+    <Declaration><![CDATA[{attribute 'pack_mode' := '1'}
+TYPE ST_MeldServoSchrauber_1 :
+STRUCT
+{attribute 'Message.SourceID'}
+	SourceID			:DINT;
+	
+{attribute 'Message.SourceName'}
+   SourceName		:STRING;
+	
+	
+{attribute 'Message.Text' := '%Var1: Fehler beim Nachladen in den Schrauber! Schraube fehlt!'}//-40 Schraube fehlt	
+{attribute 'Message.Info' := '}
+{attribute 'Message.Type' := '7'}	
+{attribute 'Message.Log'  := '1'}
+{attribute 'Message.Var1' := 'sName'}
+	bMeldFehlNachladen			:BOOL;
+{attribute 'Message.Text' := '%Var1: Langsame Geschwindigkeit wird nicht erreicht!'}	//-45	
+{attribute 'Message.Info' := '}
+{attribute 'Message.Type' := '7'}	
+{attribute 'Message.Log'  := '1'}
+{attribute 'Message.Var1' := 'sName'}
+	bMeldFehlLangsameGeschwindigkeit	:BOOL;		
+{attribute 'Message.Text' := '%Var1: Schraubtiefe für Solldrehzahl wird nicht erreciht!'}	//-50	
+{attribute 'Message.Info' := '}
+{attribute 'Message.Type' := '7'}	
+{attribute 'Message.Log'  := '1'}
+{attribute 'Message.Var1' := 'sName'}
+	bMeldFehlTiefeSolldrehzahl	:BOOL;		
+{attribute 'Message.Text' := '%Var1: Solltiefe wird nicht erreicht!'}			//-60	
+{attribute 'Message.Info' := '}
+{attribute 'Message.Type' := '7'}	
+{attribute 'Message.Log'  := '1'}
+{attribute 'Message.Var1' := 'sName'}
+	bMeldFehlSollTiefe			:BOOL;		
+{attribute 'Message.Text' := '%Var1: Solltiefe wurde überschritten!'}			//-61	
+{attribute 'Message.Info' := '}
+{attribute 'Message.Type' := '7'}	
+{attribute 'Message.Log'  := '1'}
+{attribute 'Message.Var1' := 'sName'}
+	bMeldFehlSollTiefeUebers	:BOOL;	
+{attribute 'Message.Text' := '%Var1: Solldrehmoment wird nicht erreicht!'}	 	//-65 
+{attribute 'Message.Info' := '}
+{attribute 'Message.Type' := '7'}	
+{attribute 'Message.Log'  := '1'}
+{attribute 'Message.Var1' := 'sName'}
+	bMeldFehlSollDrehmom			:BOOL;	
+{attribute 'Message.Text' := '%Var1: Fehler beim heben/senken der Schrauberstange!'}//-80 	
+{attribute 'Message.Info' := '}
+{attribute 'Message.Type' := '7'}	
+{attribute 'Message.Log'  := '1'}
+{attribute 'Message.Var1' := 'sName'}
+	bMeldFehlSchrauberstange			:BOOL;	
+{attribute 'Message.Text' := '%Var1: Fehler beim Auswerfen!'}						//-210 	
+{attribute 'Message.Info' := '}
+{attribute 'Message.Type' := '7'}	
+{attribute 'Message.Log'  := '1'}
+{attribute 'Message.Var1' := 'sName'}
+	bMeldFehlAuswerfen			:BOOL;	
+
+{attribute 'Message.Text' := '%Var1: Schrauber ist abgewählt!'}							
+{attribute 'Message.Info' := '}
+{attribute 'Message.Type' := '2'}	
+{attribute 'Message.Log'  := '1'}
+{attribute 'Message.Var1' := 'sName'}
+	bMeldSchrauberAbgewaehlt	:BOOL;
+	
+// aktuell nicht vorhanden
+//{attribute 'Message.Text' := '%Var1: Kontrolldrehmoment wird nicht eingehalten!'}		
+//{attribute 'Message.Info' := '}
+//{attribute 'Message.Type' := '7'}	
+//{attribute 'Message.Log'  := '1'}
+//{attribute 'Message.Var1' := 'sName'}
+//	bMeldFehlKontrlDrehmom		:BOOL;	
+//{attribute 'Message.Text' := '%Var1: Sicherheitsverriegelung Vorsteuerzylinder, X-Position nicht im Arbeitsbereich oder abgewählt!'}		
+//{attribute 'Message.Info' := '}
+//{attribute 'Message.Type' := '7'}	
+//{attribute 'Message.Log'  := '1'}
+//{attribute 'Message.Var1' := 'sName'}
+//	bMeldFehlKollision			:BOOL;	
+//{attribute 'Message.Text' := '%Var1: Geberwert nicht plausibel - Prüfen, ob Schrauberstange festsitzt! Bei Wechsel bitte Referenzierfahrt starten!'}		
+//{attribute 'Message.Info' := '}
+//{attribute 'Message.Type' := '1'}	
+//{attribute 'Message.Log'  := '1'}
+//{attribute 'Message.Var1' := 'sName'}
+//	bMeldFehlGeberwert			:BOOL;	
+	
+	sName	:STRING;
+
+	
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

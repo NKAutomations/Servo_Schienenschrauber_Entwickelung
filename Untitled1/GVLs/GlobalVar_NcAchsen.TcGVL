@@ -1,0 +1,9 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <GVL Name="GlobalVar_NcAchsen" Id="{07d529d0-69d7-4660-acdd-b0c75df8d573}">
+    <Declaration><![CDATA[{attribute 'Tc2GvlVarNames'}
+VAR_GLOBAL
+	arrNcAchsen								: ARRAY[0..2] OF ST_NcAchsen;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>
