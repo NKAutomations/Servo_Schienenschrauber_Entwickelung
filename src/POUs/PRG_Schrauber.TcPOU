@@ -4,7 +4,8 @@
     <Declaration><![CDATA[PROGRAM PRG_Schrauber
 VAR
 	fbSchrauber_PnP_Original	:FB_Schrauber_PnP;
-	fbSchrauber_PnP_Entwickel	:FB_Schrauber_PnP_Neu_1;
+	fbSchrauber_PnP_Entwickel_1	:FB_Schrauber_PnP_1;
+	fbSchrauber_PnP_Entwickel_2	:FB_Schrauber_PnP_2;
 	
 	nAchsId : INT;
 	
@@ -31,12 +32,15 @@ fbSchrauber_PnP_Original(
 	IQ_fbObjSchlauch:= 				objSchlauch, 
 	IQ_stMeldung:= 					stAchsMeldung);
 	
-fbSchrauber_PnP_Entwickel(
+fbSchrauber_PnP_Entwickel_1(
 	I_bResetTeststation := 			TRUE,
 	IQ_fbObjSchlauch:= 				objSchlauch, 
 	IQ_stMeldung:= 					stAchsMeldung);
 	
-]]></ST>
+fbSchrauber_PnP_Entwickel_2(
+	I_bResetTeststation := 			TRUE,
+	IQ_fbObjSchlauch:= 				objSchlauch, 
+	IQ_stMeldung:= 					stAchsMeldung);]]></ST>
       </Implementation>
     </Action>
     <Action Name="ac01_AchsAnstrg" Id="{c4e7976c-bebe-4a61-9af8-a1349e0cfa35}">
@@ -236,10 +240,10 @@ arrStartAusf[cAxis1261_Schrauber1](
 	I_bAchseFrgGrdP		:=	TRUE,
 	I_bAchseFrgArbP		:= TRUE,
 	I_bAchseFrgRglP		:= FALSE,
-	I_bAchseStopPos		:= 	fbSchrauber_PnP_Entwickel.Q_bSchrHalt,
+	I_bAchseStopPos		:= 	fbSchrauber_PnP_Entwickel_1.Q_bSchrHalt,
 	I_nStreckeRglP		:= 2);
 
-arrNcAchsen[cAxis1261_Schrauber1].stAuftrg.bPTP_halt	:= fbSchrauber_PnP_Entwickel.Q_bSchrHalt;
+arrNcAchsen[cAxis1261_Schrauber1].stAuftrg.bPTP_halt	:= fbSchrauber_PnP_Entwickel_1.Q_bSchrHalt;
 
 (*=============================================================================================*)
 (* Achsansteurung *)
@@ -247,15 +251,15 @@ arrAnstgSchrauberAchse[1].I_nBetrArt	:= 1;
 
 (*=============================================================================================*)	
 (* Drehmoment *)
-arrNcAchsen[cAxis1261_Schrauber1].stEinAusG.Q_nDrehmomentGrenzwert := fbSchrauber_PnP_Entwickel.Q_nTorque;
+arrNcAchsen[cAxis1261_Schrauber1].stEinAusG.Q_nDrehmomentGrenzwert := fbSchrauber_PnP_Entwickel_1.Q_nTorque;
 	
 (*=============================================================================================*)	
 (* Reset *)
-arrNcAchsReset[cAxis1261_Schrauber1]:= fbSchrauber_PnP_Entwickel.Q_bAxisReset;
+arrNcAchsReset[cAxis1261_Schrauber1]:= fbSchrauber_PnP_Entwickel_1.Q_bAxisReset;
 
 (*=============================================================================================*)	
 (* Neuer Ablauf *)
-fbSchrauber_PnP_Entwickel(
+fbSchrauber_PnP_Entwickel_1(
 	I_bResetTeststation := 			FALSE,
 	I_bTaktFrg:= 					stSKSSchrauberInOut_Vis_Schr_1.I_bTaktFrg, 
 	I_bTaktStop:= 					stSKSSchrauberInOut_Vis_Schr_1.I_bTaktStop, 
@@ -316,11 +320,11 @@ stSKSSchrauberInOut_Vis_Schr_1.Q_nActDepth	:=	arrNcAchsen[cEnc03_Schrauber1].fPo
 (*=============================================================================================*)	
 (* Output Übergabe *)
 
-bGVLVentil_1_Ausfahr:=		fbSchrauber_PnP_Original.Q_bSchraubHub;
-bGVLVentil_1_Einfahr:=		NOT fbSchrauber_PnP_Original.Q_bSchraubHub;
+bGVLVentil_1_Ausfahr:=		fbSchrauber_PnP_Entwickel_1.Q_bSchraubHub;
+bGVLVentil_1_Einfahr:=		NOT fbSchrauber_PnP_Entwickel_1.Q_bSchraubHub;
 
-bGVLVentil_2_Ausfahr:=		fbSchrauber_PnP_Original.Q_bSchrAuswurf;
-bGVLVentil_2_Einfahr:=		NOT fbSchrauber_PnP_Original.Q_bSchrAuswurf;]]></ST>
+bGVLVentil_2_Ausfahr:=		fbSchrauber_PnP_Entwickel_1.Q_bSchrAuswurf;
+bGVLVentil_2_Einfahr:=		NOT fbSchrauber_PnP_Entwickel_1.Q_bSchrAuswurf;]]></ST>
       </Implementation>
     </Action>
     <LineIds Name="PRG_Schrauber">
@@ -339,6 +343,7 @@ bGVLVentil_2_Einfahr:=		NOT fbSchrauber_PnP_Original.Q_bSchrAuswurf;]]></ST>
       <LineId Id="9" Count="0" />
       <LineId Id="7" Count="0" />
       <LineId Id="3" Count="0" />
+      <LineId Id="17" Count="2" />
       <LineId Id="11" Count="0" />
     </LineIds>
     <LineIds Name="PRG_Schrauber.ac01_AchsAnstrg">
