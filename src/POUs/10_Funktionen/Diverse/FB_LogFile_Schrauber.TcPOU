@@ -1,0 +1,303 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_LogFile_Schrauber" Id="{557468a9-dabe-4ba0-9dd7-5d67843a682f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_LogFile_Schrauber
+VAR_INPUT
+	I_bStart			: BOOL;	
+
+	I_sDateipfad	: T_MaxString;
+	I_sDateiname	: T_MaxString;
+	I_sUeberschrift: T_MaxString;
+(*	I_sZeile			: T_MaxString;*)
+
+	I_sFehler1		: STRING;
+	I_sFehler2		: STRING;
+	I_sFehler3		: STRING;
+	I_sFehler4		: STRING;
+	I_sFehler5		: STRING;
+	I_sFehler6		: STRING;
+	I_sFehler7		: STRING;
+	I_sFehler8		: STRING;
+	I_sFehler9		: STRING;
+
+	I_sBarcode		: STRING(19);
+
+	I_bFehler1		: BOOL;
+	I_bFehler2		: BOOL;
+	I_bFehler3		: BOOL;
+	I_bFehler4		: BOOL;
+	I_bFehler5		: BOOL;
+	I_bFehler6		: BOOL;
+	I_bFehler7		: BOOL;
+	I_bFehler8		: BOOL;
+	I_bFehler9		: BOOL;
+
+	I_nAnzahlVerschraubungen		: INT;
+
+	I_tSchraubzeit						: TIME;
+	I_fSchraubtiefe					: LREAL;
+	I_fDrehmoment						: LREAL;
+		
+	I_fbZeitstempel	: FB_Zeitstempel;				(*Zeitstempelbaustein zum Schreiben der Logdatei*)
+
+END_VAR
+VAR_OUTPUT
+	Q_bDone		: BOOL;
+END_VAR
+VAR
+	nStep			: INT;
+	sPfadname	: T_MaxString;
+	sZeile		: T_MaxString;
+	fbFindFile	: FB_EnumFindFileEntry;
+	fbFileOpen 	: FB_FileOpen;
+	fbFileWrite : FB_FileWrite;
+	fbFileClose	: FB_FileClose;
+	
+	sLogZeile	: T_MaxString;	
+
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[a_LogZeile();
+
+CASE nStep OF
+
+0: (*INIT*)
+	fbFileOpen(bExecute := FALSE);
+	fbFindFile(bExecute := FALSE);
+	fbFileWrite(bExecute := FALSE);
+	fbFileClose(bExecute := FALSE);
+	sPfadname	:= '';
+	Q_bDone		:= FALSE;
+	IF I_bStart
+		AND sLogZeile <> ''
+	THEN
+		sPfadname :=CONCAT(CONCAT(CONCAT(I_sDateipfad,'\'),I_sDateiname),'.csv');
+		nStep := 5;
+	END_IF
+
+
+5: (*Check ob Datei vorhanden ist*)
+	fbFindFile(
+		sNetId		:= , 
+		sPathName	:= sPfadname, 
+		eCmd			:= , 
+		bExecute		:= TRUE, 
+		tTimeout		:= T#2S, 
+		bBusy			=> , 
+		bError		=> , 
+		nErrID		=> , 
+		bEOE			=> , 
+		stFindFile	=> );
+	
+	IF NOT fbFindFile.bBusy
+		AND NOT fbFindFile.bError
+	THEN
+		nStep:= 10;
+	END_IF
+
+
+10: (* Öffne Datei*)
+	fbFileOpen(
+		sNetId		:= , 
+		sPathName	:= sPfadname, 
+		nMode			:= FOPEN_MODEAPPEND OR FOPEN_MODEPLUS, 
+		ePath			:= PATH_GENERIC , 
+		bExecute		:= TRUE, 
+		tTimeout		:= T#2S, 
+		bBusy			=> , 
+		bError		=> , 
+		nErrId		=> , 
+		hFile			=> );
+		
+	IF NOT fbFileOpen.bBusy
+		AND NOT fbFileOpen.bError
+	THEN
+		IF fbFindFile.stFindFile.sFileName <> ''
+		THEN
+			nStep := 20;
+		ELSE
+			nStep:= 13;
+		END_IF
+	END_IF
+	
+
+13: (* Schreibe Überschrift*)
+	fbFileWrite(
+		sNetId		:= , 
+		hFile			:= fbFileOpen.hFile, 
+		pWriteBuff	:= ADR(I_sUeberschrift), 
+		cbWriteLen	:= LEN(I_sUeberschrift), 
+		bExecute		:= TRUE, 
+		tTimeout		:= T#2S, 
+		bBusy			=> , 
+		bError		=> , 
+		nErrId		=> , 
+		cbWrite		=> );
+		
+	IF NOT fbFileWrite.bBusy
+		AND NOT fbFileWrite.bError
+	THEN
+		nStep:= 14;
+	END_IF
+
+14:
+	fbFileWrite(
+		bExecute		:= FALSE); 
+	nStep:= 20;
+	
+
+20: (* Schreibe Datei*)
+	sZeile:= CONCAT(sLogZeile,'$R');
+	fbFileWrite(
+		sNetId		:= , 
+		hFile			:= fbFileOpen.hFile, 
+		pWriteBuff	:= ADR(sZeile), 
+		cbWriteLen	:= LEN(sZeile), 
+		bExecute		:= TRUE, 
+		tTimeout		:= T#2S, 
+		bBusy			=> , 
+		bError		=> , 
+		nErrId		=> , 
+		cbWrite		=> );
+		
+	IF NOT fbFileWrite.bBusy
+		AND NOT fbFileWrite.bError
+	THEN
+		nStep:= 30;
+	END_IF
+	
+
+30: (* Schließe Datei*)
+	fbFileClose(
+		sNetId	:= , 
+		hFile		:= fbFileOpen.hFile, 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S, 
+		bBusy		=> , 
+		bError	=> , 
+		nErrId	=> );
+		
+	IF NOT fbFileClose.bBusy
+		AND NOT fbFileClose.bError
+	THEN
+		nStep:= 40;
+	END_IF
+	
+
+40: (* Melde DONE*)
+	Q_bDone := TRUE;
+	IF NOT I_bStart
+	THEN
+		nStep:= 0;
+	END_IF
+
+END_CASE]]></ST>
+    </Implementation>
+    <Action Name="a_LogZeile" Id="{f5265374-92c5-4b6f-853d-f88fc14bdff8}">
+      <Implementation>
+        <ST><![CDATA[sLogZeile := '';
+
+sLogZeile:= CONCAT(sLogZeile,WORD_TO_STRING(prgMAIN.fbZeitstempel.Q_objTimestamp.nJahr));
+sLogZeile:= CONCAT(sLogZeile,'-');
+IF prgMAIN.fbZeitstempel.Q_objTimestamp.nMonat < 10
+THEN
+sLogZeile:= CONCAT(sLogZeile,'0');
+END_IF
+sLogZeile:= CONCAT(sLogZeile,WORD_TO_STRING(prgMAIN.fbZeitstempel.Q_objTimestamp.nMonat));
+sLogZeile:= CONCAT(sLogZeile,'-');
+IF prgMAIN.fbZeitstempel.Q_objTimestamp.nTag < 10
+THEN
+sLogZeile:= CONCAT(sLogZeile,'0');
+END_IF
+sLogZeile:= CONCAT(sLogZeile,WORD_TO_STRING(prgMAIN.fbZeitstempel.Q_objTimestamp.nTag));
+sLogZeile:= CONCAT(sLogZeile,'-');
+IF prgMAIN.fbZeitstempel.Q_objTimestamp.nStunde < 10
+THEN
+sLogZeile:= CONCAT(sLogZeile,'0');
+END_IF
+sLogZeile:= CONCAT(sLogZeile,WORD_TO_STRING(prgMAIN.fbZeitstempel.Q_objTimestamp.nStunde));
+sLogZeile:= CONCAT(sLogZeile,':');
+IF prgMAIN.fbZeitstempel.Q_objTimestamp.nMinute < 10
+THEN
+sLogZeile:= CONCAT(sLogZeile,'0');
+END_IF
+sLogZeile:= CONCAT(sLogZeile,WORD_TO_STRING(prgMAIN.fbZeitstempel.Q_objTimestamp.nMinute));
+sLogZeile:= CONCAT(sLogZeile,':');
+IF prgMAIN.fbZeitstempel.Q_objTimestamp.nSekunde < 10
+THEN
+sLogZeile:= CONCAT(sLogZeile,'0');
+END_IF
+sLogZeile:= CONCAT(sLogZeile,WORD_TO_STRING(prgMAIN.fbZeitstempel.Q_objTimestamp.nSekunde));
+sLogZeile:= CONCAT(sLogZeile,';');
+
+sLogZeile:= CONCAT(sLogZeile,INT_TO_STRING(I_nAnzahlVerschraubungen));
+sLogZeile:= CONCAT(sLogZeile,';');
+
+sLogZeile:= CONCAT(sLogZeile,TIME_TO_STRING(I_tSchraubzeit));
+sLogZeile:= CONCAT(sLogZeile,';');
+
+sLogZeile:= CONCAT(sLogZeile,TO_STRING(I_fDrehmoment));
+sLogZeile:= CONCAT(sLogZeile,';');
+
+sLogZeile:= CONCAT(sLogZeile,TO_STRING(I_fSchraubtiefe));
+sLogZeile:= CONCAT(sLogZeile,';');
+
+sLogZeile:= CONCAT(sLogZeile, I_sBarcode);
+sLogZeile:= CONCAT(sLogZeile,';');
+
+IF I_bFehler1
+THEN
+	sLogZeile:= CONCAT(sLogZeile,I_sFehler1);
+END_IF
+IF I_bFehler2
+THEN
+	sLogZeile:= CONCAT(sLogZeile,I_sFehler2);
+END_IF
+IF I_bFehler3
+THEN
+	sLogZeile:= CONCAT(sLogZeile,I_sFehler3);
+END_IF
+IF I_bFehler4
+THEN
+	sLogZeile:= CONCAT(sLogZeile,I_sFehler4);
+END_IF
+IF I_bFehler5
+THEN
+	sLogZeile:= CONCAT(sLogZeile,I_sFehler5);
+END_IF
+IF I_bFehler6
+THEN
+	sLogZeile:= CONCAT(sLogZeile,I_sFehler6);
+END_IF
+IF I_bFehler7
+THEN
+	sLogZeile:= CONCAT(sLogZeile,I_sFehler7);
+END_IF
+IF I_bFehler8
+THEN
+	sLogZeile:= CONCAT(sLogZeile,I_sFehler8);
+END_IF
+IF I_bFehler9
+THEN
+	sLogZeile:= CONCAT(sLogZeile,I_sFehler9);
+END_IF
+sLogZeile:= CONCAT(sLogZeile,';');
+
+]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="FB_LogFile_Schrauber">
+      <LineId Id="152" Count="133" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_LogFile_Schrauber.a_LogZeile">
+      <LineId Id="2" Count="39" />
+      <LineId Id="68" Count="5" />
+      <LineId Id="42" Count="23" />
+      <LineId Id="74" Count="15" />
+      <LineId Id="66" Count="1" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="F_PosZustand" Id="{6168bc42-9040-4099-97cf-1f776193ef61}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_PosZustand : STRING(80)
+VAR_INPUT
+	I_sString	:STRING;
+	I_nStep 		:INT;
+	I_sStep 		:STRING;
+END_VAR
+VAR
+	stemp 	:STRING;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	stemp := 'nStep : ' (*CONCAT(I_string,' - nStep : ');*);
+	stemp := CONCAT(stemp,INT_TO_STRING(I_nStep));
+	stemp := CONCAT(stemp,' - ');
+	stemp := CONCAT(stemp,I_sStep);
+
+
+	F_PosZustand := stemp;]]></ST>
+    </Implementation>
+    <LineIds Name="F_PosZustand">
+      <LineId Id="3" Count="5" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,206 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_Zeitstempel" Id="{2faed885-f547-496c-b2be-4f24b547ddb9}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Zeitstempel
+	(******************************************************************)
+	(*	Version history																*)
+	(*	Date				:	17/01/2002												*)
+	(*	Version			:	2.0.0														*)
+ 	(*	Created under	:	2.7.0	(Build 405)										*)
+	(*	Author			:	Torsten Schulz											*)
+	(******************************************************************)
+	(*	History			:																*)
+	(*	Irgendwann mal	-	Erste Version											*)
+	(*	17.01.2002		- 	Zeitbasis durch Vielfaches der Zykluszeit.	*)
+	(*							Synchronisierung 1xproSekunde, hSec werden	*)
+	(*							durch Plc-Task incrementiert.						*)
+	(******************************************************************)
+VAR_INPUT
+	I_bHochkomma 		:	BOOL;					(* Jeweils Datum und Uhrzeit in Hochkommata *)
+	I_bSemikolon		:	BOOL;					(* Datum- Uhrzeit-Treuung mit Semikolon, Standard ist Bindestrich *)
+END_VAR
+VAR_OUTPUT
+	Q_objTimestamp	:	FB_OBJ_TimeStamp;			(* Alle Ausgangswerte zusammengefasst *)
+END_VAR
+VAR
+	bInitOk			:	BOOL;						(* Für einmaliges Lesen der Zykluszeit *)
+	nSPS_Taskzeit	:	UINT;						(* Ermittelte SPS-Zykluszeit *)
+	fbTaskIndex		:	GETCURTASKINDEX;		(* Instanz zur Ermittlung des SPS-Task		*)
+	nCounter			:	UDINT;					(* Zähler für hSec-Äquivalent durch Zykluszeit *)
+	rtrigStart		:	R_TRIG;					(* Trigger zum Start der Formatierung nach neuer Zeitlesung *)
+	nSec				:	WORD;						(* Hilfsvariable für hSec Darstellung *)
+	sQ1				:	STRING;					(* Hilfvariable zur Formaterzeugung *)
+
+	sHochkomma		:	STRING(2);				(* Hochkomma-Platzhalter *)
+	sSemikolon		:	STRING(3);				(* Semikolon-Platzhalter *)
+	stTimeStr		:	TimeStruct;				(* Structur zum Lesen der Zeit *)
+	fbgettime		:	NT_GetTime;				(* Instanz zum Lesen der Zeit *)
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	(****************************************************************************************)
+	(* Lesen der Zykluszeit des Task *)
+	IF NOT bInitOk
+	THEN
+		(* Aktuellen SPS-Task ermitteln *)
+		fbTaskIndex();
+
+		(* Ermitteln der SPS-Zykluszeit im ms*)
+		nSPS_Taskzeit:=
+			UDINT_TO_UINT(_TaskInfo[fbTaskIndex.INDEX].cycleTime / 10000);
+
+		bInitOk	:= TRUE;
+	END_IF
+
+	(****************************************************************************************)
+	IF I_bHochkomma
+	THEN
+		sHochkomma := '"';
+	ELSE
+		sHochkomma := '';
+	END_IF
+
+	IF I_bSemikolon
+	THEN
+		sSemikolon := ';';
+	ELSE
+		sSemikolon := ' - ';
+	END_IF
+
+	nCounter := nCounter + nSPS_Taskzeit;
+	IF	nCounter >= (1000)
+	THEN
+		nCounter := 0;
+	END_IF
+
+	fbgettime(Start := (nCounter = 0));
+
+	rtrigStart(
+		Clk	:=	NOT fbgettime.BUSY);
+
+	IF	rtrigStart.Q
+	THEN
+
+		(****************************************************************************************)
+		(* Zeitstring holen *)
+		stTimeStr := fbgettime.TimeStr;
+
+		sQ1 := '';
+
+		(****************************************************************************************)
+		(* ggf Hochkomma wenn CSV-Datei *)
+		sQ1 := CONCAT(sQ1,sHochkomma);
+
+		(****************************************************************************************)
+		(* Tag *)
+		IF stTimeStr.wDay < 10
+		THEN
+			sQ1 := CONCAT(sQ1,'0');
+		END_IF
+		sQ1 := CONCAT(sQ1,WORD_TO_STRING(stTimeStr.wDay));
+		sQ1 := CONCAT(sQ1,'.');
+
+		Q_objTimestamp.nTag				:=	stTimeStr.wDay;
+		Q_objTimestamp.nTagDerWoche	:=	stTimeStr.wDayOfWeek;
+
+		(****************************************************************************************)
+		(* Monat *)
+		IF stTimeStr.wMonth < 10
+		THEN
+			sQ1 := CONCAT(sQ1,'0');
+		END_IF
+		sQ1 := CONCAT(sQ1,WORD_TO_STRING(stTimeStr.wMonth));
+		sQ1 := CONCAT(sQ1,'.');
+
+		Q_objTimestamp.nMonat	:=	stTimeStr.wMonth;
+
+		(****************************************************************************************)
+		(* Jahr *)
+		sQ1 := CONCAT(sQ1,WORD_TO_STRING(stTimeStr.wYear));
+
+		Q_objTimestamp.nJahr	:=	stTimeStr.wYear;
+
+		(****************************************************************************************)
+		(* ggf Hochkomma wenn CSV-Datei *)
+		sQ1 := CONCAT(sQ1,sHochkomma);
+
+		(****************************************************************************************)
+		(* Trennung *)
+		sQ1 := CONCAT(sQ1,sSemikolon);
+
+		(****************************************************************************************)
+		(* ggf Hochkomma wenn CSV-Datei *)
+		sQ1 := CONCAT(sQ1,sHochkomma);
+
+		(****************************************************************************************)
+		(* Stunde *)
+		IF stTimeStr.wHour < 10
+		THEN
+			sQ1 := CONCAT(sQ1,'0');
+		END_IF
+
+		sQ1 := CONCAT(sQ1,WORD_TO_STRING(stTimeStr.wHour));
+		sQ1 := CONCAT(sQ1,':');
+
+		Q_objTimestamp.nStunde	:=	stTimeStr.wHour;
+
+		(****************************************************************************************)
+		(* Minute *)
+		IF stTimeStr.wMinute < 10
+		THEN
+			sQ1 := CONCAT(sQ1,'0');
+		END_IF
+
+		sQ1 := CONCAT(sQ1,WORD_TO_STRING(stTimeStr.wMinute));
+		sQ1 := CONCAT(sQ1,':');
+
+		Q_objTimestamp.nMinute	:=	stTimeStr.wMinute;
+
+		(****************************************************************************************)
+		(* Sekunde *)
+		IF stTimeStr.wSecond < 10
+		THEN
+			sQ1 := CONCAT(sQ1,'0');
+		END_IF
+
+		sQ1 := CONCAT(sQ1,WORD_TO_STRING(stTimeStr.wSecond));
+		sQ1 := CONCAT(sQ1,':');
+
+		Q_objTimestamp.nSekunde	:=	stTimeStr.wSecond;
+		nSec		:= 0;
+	ELSE
+		nSec	:=	nSec + nSPS_Taskzeit;
+
+		IF	nSec >= 1000
+		THEN
+			nSec	:= 0;
+		END_IF
+
+		IF 	(nSec < 100)
+			AND (nSec > 9)
+		THEN
+			Q_objTimestamp.sQ := CONCAT('0', WORD_TO_STRING(nSec));
+		ELSIF nSec < 10
+		THEN
+			Q_objTimestamp.sQ := CONCAT('00', WORD_TO_STRING(nSec));
+		ELSE
+			Q_objTimestamp.sQ := WORD_TO_STRING(nSec);
+		END_IF
+
+		IF LEN(sQ1) > 0
+		THEN
+			Q_objTimestamp.sQ := CONCAT(sQ1,Q_objTimestamp.sQ);
+
+			(****************************************************************************************)
+			(* ggf Hochkomma wenn CSV-Datei *)
+			Q_objTimestamp.sQ := CONCAT(Q_objTimestamp.sQ,sHochkomma);
+
+		END_IF
+	END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Zeitstempel">
+      <LineId Id="3" Count="157" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

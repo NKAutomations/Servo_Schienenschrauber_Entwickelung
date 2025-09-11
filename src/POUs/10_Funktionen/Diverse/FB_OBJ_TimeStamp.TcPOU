@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_OBJ_TimeStamp" Id="{eac4c4b4-1016-48e0-be93-23dd1b900557}" SpecialFunc="None">
+    <Declaration><![CDATA[{attribute 'pack_mode' := '1'}
+FUNCTION_BLOCK FB_OBJ_TimeStamp
+VAR_INPUT
+	sQ					:	STRING;				(* Zeitstempel *)
+	nStunde			:	WORD;					(* Stunde als Dezimalwert *)
+	nMinute			:	WORD;					(* Minute als Dezimalwert *)
+	nSekunde			:	WORD;					(* Sekunde als Dezimalwert *)
+	nTag				:	WORD;					(* Tag als Dezimalwert *)
+	nMonat			:	WORD;					(* Monat als Dezimalwert *)
+	nJahr				:	WORD;					(* Jahr als Dezimalwert *)
+	nTagDerWoche	:	WORD;					(* Tag der Woche  als Dezimalwert *)
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_OBJ_TimeStamp">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

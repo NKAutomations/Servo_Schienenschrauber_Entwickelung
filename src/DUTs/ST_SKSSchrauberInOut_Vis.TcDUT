@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <DUT Name="ST_SKSSchrauberInOut_Vis" Id="{bab186f4-fb63-4683-9211-3ebb254712f6}">
+    <Declaration><![CDATA[TYPE ST_SKSSchrauberInOut_Vis :
+STRUCT
+	I_bTaktFrg						: BOOL;
+	I_bTaktStop						: BOOL;
+	I_bAuto							: BOOL;
+	I_bHand							: BOOL;
+	I_bQuittFehler					: BOOL;
+
+	I_bTaktStart					: BOOL;	(*Start Schienenschrauben*)
+
+	I_bGrdstlgSchrEinh				: BOOL;
+	I_bZustellZylAusgef				: BOOL;
+
+	I_fSchraubTiefeAuswurf			: LREAL;
+
+	I_fTiefentoleranzPositiv		: LREAL:=1;	(* Z.B. 3 bedeutet, dass von Solltiefe bis + 3mm wir im Ziel liegen *)
+	I_fTiefentoleranzNegativ		: LREAL:=0.5;	(* Z.B. 3 bedeutet, dass von Solltiefe bis - 3mm wir im Ziel liegen *)
+		
+	I_bSchraubeNachschiessen		: BOOL;
+
+	I_bFreigabeAuswerfen			: BOOL;
+	
+	I_bSchlauchBelegt				:BOOL;
+	I_bSchrauberBelegt				:BOOL;
+	I_bAuswurfStart					:BOOL;
+	I_bVereinzelungStart			:BOOL;
+	
+	Q_bBusy							: BOOL;
+	Q_bDone							: BOOL;
+	Q_bError						: BOOL;
+	
+	Q_nErrorId						: INT;
+	Q_bDrehmomentFehler				: BOOL;
+	
+	Q_bDrehmomentOk					:BOOL;
+	
+	Q_nActTorque					:LREAL; 	(* Drehmoment ausgabe Mittelwert *)
+	Q_nActDepth						:LREAL; 	(* Tiefen ausgabe  *)
+	Q_nActVelo						:LREAL;		
+	Q_nActPos						:LREAL;
+	
+	Q_nLastTorque					:LREAL;
+	Q_nLastDepth					:LREAL;
+	
+	Q_nStep							: INT;
+	
+	Q_strStep						: STRING;
+	Q_sStatus						: STRING(255);	//Informationen zu dem aktuellen Ablaufschritt
+	
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

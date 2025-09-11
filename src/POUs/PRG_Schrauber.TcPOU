@@ -1,0 +1,427 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="PRG_Schrauber" Id="{34a606c7-1c45-4e93-ba88-083be396186c}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PRG_Schrauber
+VAR
+	fbSchrauber_PnP_Original	:FB_Schrauber_PnP;
+	fbSchrauber_PnP_Entwickel	:FB_Schrauber_PnP_Neu_1;
+	
+	nAchsId : INT;
+	
+	iAuswSchrauberMode	:INT := 0;	(* 0 = Original Ablauf | 1 = Versuch Ablauf *)
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ac01_AchsAnstrg();
+
+CASE iAuswSchrauberMode OF
+0:	ac00_Init();	(* Reset beide Abläufe *)
+1:	ac10_OriginalSchrauberAblauf();
+2:	ac11_EntwickelungSchrauberAblauf();
+END_CASE]]></ST>
+    </Implementation>
+    <Action Name="ac00_Init" Id="{33fc87e0-282b-4ce5-9207-c1d40d18faa3}">
+      <Implementation>
+        <ST><![CDATA[(* RESET *)
+
+
+fbSchrauber_PnP_Original(
+	I_bResetTeststation := 			TRUE,
+	IQ_fbObjSchlauch:= 				objSchlauch, 
+	IQ_stMeldung:= 					stAchsMeldung);
+	
+fbSchrauber_PnP_Entwickel(
+	I_bResetTeststation := 			TRUE,
+	IQ_fbObjSchlauch:= 				objSchlauch, 
+	IQ_stMeldung:= 					stAchsMeldung);
+	
+]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ac01_AchsAnstrg" Id="{c4e7976c-bebe-4a61-9af8-a1349e0cfa35}">
+      <Implementation>
+        <ST><![CDATA[
+(*=============================================================================================*)
+(* Achsanschaltung Global für alle Schrauberabläufe Gleich*)
+(*=============================================================================================*)
+arrBetrartAutomAktiv[1] := TRUE;
+arrAntrGruppeFrg[1] := TRUE;
+arrAntrGruppeFrg[2] := TRUE;
+
+nAchsId	:= cAxis1261_Schrauber1;
+	
+(*=============================================================================================*)
+(* NC Achse*)
+arrNcAchsen[cAxis1261_Schrauber1].stFreigb.bAntrbEinFrg				:= TRUE;
+arrNcAchsen[cAxis1261_Schrauber1].stStatus.bAchseBTB				:= TRUE;	(* Muss noch gemacht werden *)
+arrNcAchsen[cAxis1261_Schrauber1].stFreigb.bVorschFrg				:= TRUE;
+arrNcAchsen[cAxis1261_Schrauber1].stFreigb.bSensEndlNeg				:= TRUE;
+arrNcAchsen[cAxis1261_Schrauber1].stFreigb.bSensEndlPos				:= TRUE;
+arrNcAchsen[cAxis1261_Schrauber1].stEinAusG.I_nDigitaleEingaenge.3 	:= TRUE;
+arrNcAchsen[cAxis1261_Schrauber1].stEinAusG.I_nDigitaleEingaenge.4	:= TRUE;
+arrNcAchsen[cAxis1261_Schrauber1].stAuftrg.bPTP_verz				:= FALSE;
+arrNcAchsen[cAxis1261_Schrauber1].stFreigb.fOverride				:= 10;
+arrNcAchsen[cAxis1261_Schrauber1].stParam.fEilgGeschw				:= 6000;
+
+(*=============================================================================================*)	
+(* Schraubmotor *)
+arrAnstgSchrauberAchse[1](
+		IQ_stAchse 			:= arrNcAchsen[cAxis1261_Schrauber1],
+		IQ_fbAxisRef 		:= arrAxis[cAxis1261_Schrauber1],
+		);
+(*=============================================================================================*)			
+(* Encoder*)									
+arrAnstgSchrauberAchse[2](
+		IQ_stAchse 			:= arrNcAchsen[cEnc03_Schrauber1],
+		IQ_fbAxisRef 		:= arrAxis[cEnc03_Schrauber1],
+		);
+(*=============================================================================================*)			
+(* Ohne Softwareendlagen *)
+arrNcAchsen[cAxis1261_Schrauber1].stParam.bOhnSoftEndl:= TRUE;
+
+
+]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ac10_OriginalSchrauberAblauf" Id="{44ea9629-5774-4b57-8b7e-68ab33bc6377}">
+      <Implementation>
+        <ST><![CDATA[(*=============================================================================================*)	
+(* Originaler SKS-Schrauberablauf von FA Beckhoff Automation- gesichert aus Band222
+	Datum: 	11.09.2025
+	Author:	N.Kersting/ T.Hinz	 *)
+(*=============================================================================================*)	
+
+(*=============================================================================================*)
+(* Parameter *)
+stParamSKSServoschrauber.fStartDrehzahl				:= 10;
+stParamSKSServoschrauber.fParam_Solldrehzahl		:= 40;
+stParamSKSServoschrauber.fParam_Sollmoment			:= 1.4;
+stParamSKSServoschrauber.fParam_Sollschraubtiefe	:= -4;
+stParamSKSServoschrauber.fParam_Umschalttiefe		:= 2;
+stParamSKSServoschrauber.tParam_ZeitdAuswurfSchr	:= T#2S;
+stParamSKSServoschrauber.tParam_ZeitdSchraubhubSchr	:= T#2S;
+stParamSKSServoschrauber.tParam_ZeitdSchraubTakt	:= T#10S;
+stParamSKSServoschrauber.tParam_ZeitdZustellhubSchr	:= T#2S;
+
+(*=============================================================================================*)	
+(* Achsstart *)
+arrStartAusf[cAxis1261_Schrauber1](
+	I_nAchsNr			:= cAxis1261_Schrauber1,
+	I_nSchutzBer		:= 1,
+	I_bAchseFrgGrdP		:=	TRUE,
+	I_bAchseFrgArbP		:= TRUE,
+	I_bAchseFrgRglP		:= FALSE,
+	I_bAchseStopPos		:= 	fbSchrauber_PnP_Original.Q_bSchrHalt,
+	I_nStreckeRglP		:= 2);
+	
+arrNcAchsen[cAxis1261_Schrauber1].stAuftrg.bPTP_halt	:= fbSchrauber_PnP_Original.Q_bSchrHalt;
+
+(*=============================================================================================*)
+(* Achsansteurung *)
+IF fbSchrauber_PnP_Original.Q_bModuloBetrArt
+THEN
+	arrAnstgSchrauberAchse[1].I_nBetrArt	:= 1;
+ELSE
+	arrAnstgSchrauberAchse[1].I_nBetrArt	:= 0;
+END_IF
+
+(*=============================================================================================*)	
+(* Drehmoment *)
+arrNcAchsen[cAxis1261_Schrauber1].stEinAusG.Q_nDrehmomentGrenzwert := fbSchrauber_PnP_Original.Q_nTorque;
+
+(*=============================================================================================*)	
+(* Reset *)
+arrNcAchsReset[cAxis1261_Schrauber1]:= fbSchrauber_PnP_Original.Q_bAxisReset;
+
+(*=============================================================================================*)	
+(* Alter Baustein *)
+fbSchrauber_PnP_Original(
+	I_bResetTeststation := 			FALSE,
+	I_bTaktFrg:= 					stSKSSchrauberInOut_Vis_Schr_1.I_bTaktFrg, 
+	I_bTaktStop:= 					stSKSSchrauberInOut_Vis_Schr_1.I_bTaktStop, 
+	I_bQuittFehler:= 				stSKSSchrauberInOut_Vis_Schr_1.I_bQuittFehler, 
+	I_bSchutzbereichOK:= 			TRUE, 
+	I_bTaktStart:= 					stSKSSchrauberInOut_Vis_Schr_1.I_bTaktStart, 
+	I_bGrdstlgSchrEinh:= 			bGVLEndlageZyl_1_Eingef (*OR stSKSSchrauberInOut_Vis_Schr_1.I_bGrdstlgSchrEinh*), 	(* Achtung muss nachher wieder weggenommen werden, wenn der Physische aufbau da ist !!!!!*)
+	I_bZustellZylAusgef:= 			bGVLEndlageZyl_2_Ausgef (*OR stSKSSchrauberInOut_Vis_Schr_1.I_bZustellZylAusgef*), 	(* Achtung muss nachher wieder weggenommen werden, wenn der Physische aufbau da ist !!!!!*)
+	I_fSchraubTiefeAuswurf:= 		, 
+	I_fTiefentoleranzPositiv:= 		, 
+	I_fTiefentoleranzNegativ:= 		, 
+	I_nAchsId:= 					cAxis1261_Schrauber1, 
+	I_nEncId:= 						cEnc03_Schrauber1, 
+	I_stParam:= 					stParamSKSServoschrauber, 
+	I_tAutoQuit:= 					, 
+	I_bSchraubeNachschiessen:=		 , 
+	I_bReferenzfahrtAktiv:= 		, 
+	I_bFreigabeAuswerfen:= 			, 
+	I_sDateipfad:= 					, 
+	I_bSchrauberLogOn:= 			, 
+	I_nMotorHersteller:=			 1, 
+	I_bHuettenSchr:= 				, 
+	Q_bBusy=> 						stSKSSchrauberInOut_Vis_Schr_1.Q_bBusy, 
+	Q_bDone=>						stSKSSchrauberInOut_Vis_Schr_1.Q_bDone ,	 
+	Q_bError=>						stSKSSchrauberInOut_Vis_Schr_1.Q_bError , 
+	Q_sPosZustand=> , 
+	Q_bGrundstellungAktiv=> , 
+	Q_bGrundstellungOk=> , 
+	Q_bSchraubHub=> , 
+	Q_bSchrAuswurf=> , 
+	Q_bSchrHalt=> , 
+	Q_nTorque=> , 
+	Q_bAxisReset=> , 
+	Q_nErrorId=> 					stSKSSchrauberInOut_Vis_Schr_1.Q_nErrorId, 
+	Q_bDrehmomentFehler=> 			stSKSSchrauberInOut_Vis_Schr_1.Q_bDrehmomentFehler, 
+	Q_bTuerFreigabe=> , 
+	Q_nStep=> 						stSKSSchrauberInOut_Vis_Schr_1.Q_nStep, 
+	Q_strStep=> , 
+	Q_bModuloBetrArt=> , 
+	Q_sStatus=> 					stSKSSchrauberInOut_Vis_Schr_1.Q_sStatus, 
+	IQ_fbObjSchlauch:= 				objSchlauch, 
+	IQ_stMeldung:= 					stAchsMeldung);	
+	
+(*=============================================================================================*)	
+(* Schlauch belegung *)
+objSchlauch.I_bSchlauchBelegt		:=	stSKSSchrauberInOut_Vis_Schr_1.I_bSchlauchBelegt;
+objSchlauch.I_bSchrauberBelegt		:=	stSKSSchrauberInOut_Vis_Schr_1.I_bSchrauberBelegt;
+objSchlauch.I_bTasteVereinzelung	:=	stSKSSchrauberInOut_Vis_Schr_1.I_bVereinzelungStart;
+objSchlauch.I_bSchrAuswurfStart		:=	stSKSSchrauberInOut_Vis_Schr_1.I_bAuswurfStart;
+
+(*=============================================================================================*)	
+(* Visu Übergabe *)
+stSKSSchrauberInOut_Vis_Schr_1.Q_nActVelo	:=	arrNcAchsen[cAxis1261_Schrauber1].fVeloIstwert;
+stSKSSchrauberInOut_Vis_Schr_1.Q_nActPos	:=	arrNcAchsen[cAxis1261_Schrauber1].fPosIstwert;
+stSKSSchrauberInOut_Vis_Schr_1.Q_nActDepth	:=	arrNcAchsen[cEnc03_Schrauber1].fPosIstwert;
+
+
+(*=============================================================================================*)	
+(* Output Übergabe *)
+
+bGVLVentil_1_Ausfahr:=		fbSchrauber_PnP_Original.Q_bSchraubHub;
+bGVLVentil_1_Einfahr:=		NOT fbSchrauber_PnP_Original.Q_bSchraubHub;
+
+bGVLVentil_2_Ausfahr:=		fbSchrauber_PnP_Original.Q_bSchrAuswurf;
+bGVLVentil_2_Einfahr:=		NOT fbSchrauber_PnP_Original.Q_bSchrAuswurf;
+
+]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ac11_EntwickelungSchrauberAblauf" Id="{5302feab-bf50-4265-94aa-899acd52dc82}">
+      <Implementation>
+        <ST><![CDATA[(*=============================================================================================*)	
+(* Neu Entwickelter Versuchs Ablauf nach Nobilia Vorgabe 
+	aus Dokument vom 22.03.2023 Besprechungsprotokoll Ablaufbeschreibung SKS Schrauber.
+	
+	Datum: 	11.09.2025
+	Author:	N.Kersting/ T.Hinz	 *)
+(*=============================================================================================*)	
+
+(*=============================================================================================*)	
+(* Parameter *)
+stParamSKSServoschrauber.fStartDrehzahl				:= 10;
+stParamSKSServoschrauber.fParam_Solldrehzahl		:= 40;
+stParamSKSServoschrauber.fParam_Sollmoment			:= 1.4;
+stParamSKSServoschrauber.fParam_Sollschraubtiefe	:= -4;
+stParamSKSServoschrauber.fParam_Umschalttiefe		:= 2;
+stParamSKSServoschrauber.tParam_ZeitdAuswurfSchr	:= T#2S;
+stParamSKSServoschrauber.tParam_ZeitdSchraubhubSchr	:= T#2S;
+stParamSKSServoschrauber.tParam_ZeitdSchraubTakt	:= T#10S;
+stParamSKSServoschrauber.tParam_ZeitdZustellhubSchr	:= T#2S;
+
+(*=============================================================================================*)	
+(* Achsstart *)
+arrStartAusf[cAxis1261_Schrauber1](
+	I_nAchsNr			:= cAxis1261_Schrauber1,
+	I_nSchutzBer		:= 1,
+	I_bAchseFrgGrdP		:=	TRUE,
+	I_bAchseFrgArbP		:= TRUE,
+	I_bAchseFrgRglP		:= FALSE,
+	I_bAchseStopPos		:= 	fbSchrauber_PnP_Entwickel.Q_bSchrHalt,
+	I_nStreckeRglP		:= 2);
+
+arrNcAchsen[cAxis1261_Schrauber1].stAuftrg.bPTP_halt	:= fbSchrauber_PnP_Entwickel.Q_bSchrHalt;
+
+(*=============================================================================================*)
+(* Achsansteurung *)
+arrAnstgSchrauberAchse[1].I_nBetrArt	:= 1;	
+
+(*=============================================================================================*)	
+(* Drehmoment *)
+arrNcAchsen[cAxis1261_Schrauber1].stEinAusG.Q_nDrehmomentGrenzwert := fbSchrauber_PnP_Entwickel.Q_nTorque;
+	
+(*=============================================================================================*)	
+(* Reset *)
+arrNcAchsReset[cAxis1261_Schrauber1]:= fbSchrauber_PnP_Entwickel.Q_bAxisReset;
+
+(*=============================================================================================*)	
+(* Neuer Ablauf *)
+fbSchrauber_PnP_Entwickel(
+	I_bResetTeststation := 			FALSE,
+	I_bTaktFrg:= 					stSKSSchrauberInOut_Vis_Schr_1.I_bTaktFrg, 
+	I_bTaktStop:= 					stSKSSchrauberInOut_Vis_Schr_1.I_bTaktStop, 
+	I_bAuto:= , 
+	I_bHand:= , 
+	I_bQuittFehler:= 				stSKSSchrauberInOut_Vis_Schr_1.I_bQuittFehler, 
+	I_bGrundstellung:= , 
+	I_bSchutzbereichOK:= 			TRUE, 
+	I_bTaktStart:= 					stSKSSchrauberInOut_Vis_Schr_1.I_bTaktStart, 
+	I_bTaktStartHalb:= , 
+	I_bGrdstlgSchrEinh:= , 
+	I_bZustellZylAusgef:= , 
+	I_fSchraubTiefeAuswurf:= , 
+	I_fTiefentoleranzPos:= , 
+	I_fTiefentoleranzNeg:= , 
+	I_nAchsId:= 					cAxis1261_Schrauber1, 
+	I_nEncId:= 						cEnc03_Schrauber1, 
+	I_stParam:= 					stParamSKSServoschrauber, 
+	I_tAutoQuit:= , 
+	I_bSchraubeNachschiessen:= , 
+	I_bReferenzfahrtAktiv:= , 
+	I_bFreigabeAuswerfen:= , 
+	I_bSchrauberLogOn:= , 
+	I_nMotorHersteller:= , 
+	I_bHuettenSchr:= , 
+	Q_bBusy=> 						stSKSSchrauberInOut_Vis_Schr_1.Q_bBusy, 
+	Q_bDone=>						stSKSSchrauberInOut_Vis_Schr_1.Q_bDone ,	 
+	Q_bError=>						stSKSSchrauberInOut_Vis_Schr_1.Q_bError , 
+	Q_sPosZustand=> , 
+	Q_bGrundstellungAktiv=> , 
+	Q_bGrundstellungOk=> , 
+	Q_bSchraubHub=> , 
+	Q_bSchrAuswurf=> , 
+	Q_bSchrHalt=> , 
+	Q_bAxisReset=> , 
+	Q_nErrorId=> 					stSKSSchrauberInOut_Vis_Schr_1.Q_nErrorId, 
+	Q_bDrehmomentFehler=> 			stSKSSchrauberInOut_Vis_Schr_1.Q_bDrehmomentFehler, 
+	Q_nStep=> 						stSKSSchrauberInOut_Vis_Schr_1.Q_nStep,
+	Q_strStep=> , 
+	Q_sStatus=> 					stSKSSchrauberInOut_Vis_Schr_1.Q_sStatus, 
+	IQ_fbObjSchlauch:= 				objSchlauch, 
+	IQ_stMeldung:= 					stAchsMeldung);
+	
+(*=============================================================================================*)	
+(* Schlauch belegung *)
+objSchlauch.I_bSchlauchBelegt		:=	stSKSSchrauberInOut_Vis_Schr_1.I_bSchlauchBelegt;
+objSchlauch.I_bSchrauberBelegt		:=	stSKSSchrauberInOut_Vis_Schr_1.I_bSchrauberBelegt;
+objSchlauch.I_bTasteVereinzelung	:=	stSKSSchrauberInOut_Vis_Schr_1.I_bVereinzelungStart;
+objSchlauch.I_bSchrAuswurfStart		:=	stSKSSchrauberInOut_Vis_Schr_1.I_bAuswurfStart;
+
+(*=============================================================================================*)	
+(* Visu Übergabe *)
+stSKSSchrauberInOut_Vis_Schr_1.Q_nActVelo	:=	arrNcAchsen[cAxis1261_Schrauber1].fVeloIstwert;
+stSKSSchrauberInOut_Vis_Schr_1.Q_nActPos	:=	arrNcAchsen[cAxis1261_Schrauber1].fPosIstwert;
+stSKSSchrauberInOut_Vis_Schr_1.Q_nActDepth	:=	arrNcAchsen[cEnc03_Schrauber1].fPosIstwert;
+
+
+(*=============================================================================================*)	
+(* Output Übergabe *)
+
+bGVLVentil_1_Ausfahr:=		fbSchrauber_PnP_Original.Q_bSchraubHub;
+bGVLVentil_1_Einfahr:=		NOT fbSchrauber_PnP_Original.Q_bSchraubHub;
+
+bGVLVentil_2_Ausfahr:=		fbSchrauber_PnP_Original.Q_bSchrAuswurf;
+bGVLVentil_2_Einfahr:=		NOT fbSchrauber_PnP_Original.Q_bSchrAuswurf;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="PRG_Schrauber">
+      <LineId Id="251" Count="2" />
+      <LineId Id="258" Count="0" />
+      <LineId Id="254" Count="1" />
+      <LineId Id="234" Count="0" />
+    </LineIds>
+    <LineIds Name="PRG_Schrauber.ac00_Init">
+      <LineId Id="12" Count="2" />
+      <LineId Id="1" Count="0" />
+      <LineId Id="15" Count="0" />
+      <LineId Id="4" Count="2" />
+      <LineId Id="8" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="7" Count="0" />
+      <LineId Id="3" Count="0" />
+      <LineId Id="11" Count="0" />
+    </LineIds>
+    <LineIds Name="PRG_Schrauber.ac01_AchsAnstrg">
+      <LineId Id="63" Count="0" />
+      <LineId Id="65" Count="0" />
+      <LineId Id="64" Count="0" />
+      <LineId Id="2" Count="5" />
+      <LineId Id="17" Count="10" />
+      <LineId Id="29" Count="1" />
+      <LineId Id="40" Count="16" />
+      <LineId Id="59" Count="0" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="PRG_Schrauber.ac10_OriginalSchrauberAblauf">
+      <LineId Id="181" Count="0" />
+      <LineId Id="62" Count="0" />
+      <LineId Id="182" Count="1" />
+      <LineId Id="63" Count="0" />
+      <LineId Id="185" Count="0" />
+      <LineId Id="184" Count="0" />
+      <LineId Id="64" Count="9" />
+      <LineId Id="208" Count="1" />
+      <LineId Id="199" Count="7" />
+      <LineId Id="74" Count="0" />
+      <LineId Id="207" Count="0" />
+      <LineId Id="210" Count="0" />
+      <LineId Id="212" Count="7" />
+      <LineId Id="211" Count="0" />
+      <LineId Id="221" Count="2" />
+      <LineId Id="220" Count="0" />
+      <LineId Id="226" Count="2" />
+      <LineId Id="224" Count="0" />
+      <LineId Id="229" Count="0" />
+      <LineId Id="75" Count="2" />
+      <LineId Id="230" Count="0" />
+      <LineId Id="78" Count="53" />
+      <LineId Id="187" Count="2" />
+      <LineId Id="186" Count="0" />
+      <LineId Id="191" Count="1" />
+      <LineId Id="194" Count="0" />
+      <LineId Id="198" Count="0" />
+      <LineId Id="197" Count="0" />
+      <LineId Id="196" Count="0" />
+      <LineId Id="195" Count="0" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="PRG_Schrauber.ac11_EntwickelungSchrauberAblauf">
+      <LineId Id="64" Count="1" />
+      <LineId Id="70" Count="1" />
+      <LineId Id="66" Count="1" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="68" Count="0" />
+      <LineId Id="49" Count="9" />
+      <LineId Id="2" Count="0" />
+      <LineId Id="153" Count="1" />
+      <LineId Id="144" Count="7" />
+      <LineId Id="143" Count="0" />
+      <LineId Id="155" Count="0" />
+      <LineId Id="152" Count="0" />
+      <LineId Id="157" Count="2" />
+      <LineId Id="156" Count="0" />
+      <LineId Id="166" Count="2" />
+      <LineId Id="165" Count="0" />
+      <LineId Id="169" Count="0" />
+      <LineId Id="171" Count="1" />
+      <LineId Id="170" Count="0" />
+      <LineId Id="173" Count="0" />
+      <LineId Id="59" Count="0" />
+      <LineId Id="3" Count="0" />
+      <LineId Id="72" Count="0" />
+      <LineId Id="174" Count="0" />
+      <LineId Id="73" Count="0" />
+      <LineId Id="118" Count="0" />
+      <LineId Id="75" Count="11" />
+      <LineId Id="116" Count="1" />
+      <LineId Id="89" Count="7" />
+      <LineId Id="114" Count="1" />
+      <LineId Id="99" Count="8" />
+      <LineId Id="119" Count="0" />
+      <LineId Id="109" Count="4" />
+      <LineId Id="120" Count="0" />
+      <LineId Id="122" Count="20" />
+      <LineId Id="121" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
