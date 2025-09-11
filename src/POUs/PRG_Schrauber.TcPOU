@@ -25,7 +25,10 @@ END_CASE]]></ST>
     <Action Name="ac00_Init" Id="{33fc87e0-282b-4ce5-9207-c1d40d18faa3}">
       <Implementation>
         <ST><![CDATA[(* RESET *)
-
+arrBetrartAutomAktiv[1] := FALSE;
+arrAntrGruppeFrg[1] := FALSE;
+arrAntrGruppeFrg[2] := FALSE;
+arrNcAchsen[cAxis1261_Schrauber1].stFreigb.bAntrbEinFrg				:= FALSE;
 
 fbSchrauber_PnP_Original(
 	I_bResetTeststation := 			TRUE,
@@ -95,7 +98,7 @@ arrNcAchsen[cAxis1261_Schrauber1].stParam.bOhnSoftEndl:= TRUE;
 	Datum: 	11.09.2025
 	Author:	N.Kersting/ T.Hinz	 *)
 (*=============================================================================================*)	
-
+ac01_AchsAnstrg();
 (*=============================================================================================*)
 (* Parameter *)
 stParamSKSServoschrauber.fStartDrehzahl				:= 10;
@@ -219,7 +222,7 @@ bGVLVentil_2_Einfahr:=		NOT fbSchrauber_PnP_Original.Q_bSchrAuswurf;
 	Datum: 	11.09.2025
 	Author:	N.Kersting/ T.Hinz	 *)
 (*=============================================================================================*)	
-
+ac01_AchsAnstrg();
 (*=============================================================================================*)	
 (* Parameter *)
 stParamSKSServoschrauber.fStartDrehzahl				:= 10;
@@ -334,7 +337,10 @@ bGVLVentil_2_Einfahr:=		NOT fbSchrauber_PnP_Entwickel_1.Q_bSchrAuswurf;]]></ST>
       <LineId Id="234" Count="0" />
     </LineIds>
     <LineIds Name="PRG_Schrauber.ac00_Init">
-      <LineId Id="12" Count="2" />
+      <LineId Id="12" Count="0" />
+      <LineId Id="20" Count="1" />
+      <LineId Id="13" Count="1" />
+      <LineId Id="22" Count="0" />
       <LineId Id="1" Count="0" />
       <LineId Id="15" Count="0" />
       <LineId Id="4" Count="2" />
