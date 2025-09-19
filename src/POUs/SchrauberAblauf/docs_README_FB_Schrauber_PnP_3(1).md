@@ -1,323 +1,342 @@
-# FB_Schrauber_PnP_3 – Servoschrauber Pick-and-Place (Möbelindustrie)
+# FB_Schrauber_PnP_3 – Servoschrauber Pick-and-Place
 
-Vollautomatischer Servoschrauber-Baustein für Schienen- und Einzelschrauben mit NC-Achsenanbindung, Tiefen-, Winkel- und Drehmomentüberwachung.
+Dieses Dokument erklärt den Ablauf des Servoschraubers in allgemein verständlichen Worten – mit Fokus auf die drei Schraubfälle (wichtigster Teil) und ASCII-Ablaufgrafiken, damit keine Bilddateien nötig sind.
 
-- Quelle: [src/POUs/SchrauberAblauf/FB_Schrauber_PnP_3.TcPOU](https://github.com/NKAutomations/Servo_Schienenschrauber_Entwickelung/blob/36b534d5bd3ecd58059b0af279687edaf51e5fbf/src/POUs/SchrauberAblauf/FB_Schrauber_PnP_3.TcPOU)
-- TwinCAT: 3.1.4024.15
-- Autor: N. Kersting
-
-## Inhalt
-- Zweck und Funktionsumfang
-- Architektur und Ablauf
-- Prüf- und Auswertelogik (Tiefe, Drehmoment, Winkel)
-- Die 3 Schraubfälle
-- Schnittstellen (Inputs/Outputs/InOut)
-- Wichtige Methoden
-- Parametrierung und Formeln
-- Fehler- und Ereignismanagement
-- Inbetriebnahme-Hinweise
-- Troubleshooting
-- Changelog
+Inhalt
+- Überblick
+- Kernprinzipien der Überwachung
+- ASCII-Ablaufgrafik (Gesamt)
+- Die 3 Schraubfälle – ausführlich
+  - Fall 1: Drehmoment OK, Tiefe noch nicht OK
+  - Fall 2: Tiefe OK, Drehmoment noch nicht OK
+  - Fall 3: Weder Tiefe noch Drehmoment OK
+- Typische Fehlerbilder und Reaktionen
+- Parametrier- und Tuninghinweise
+- Inbetriebnahme-Checkliste
+- Referenz
 
 ---
 
-## Zweck und Funktionsumfang
+## Überblick
 
-Dieser Baustein steuert einen Servoschrauber im Pick-and-Place-Prozess:
-- Anbindung an eine NC-Drehachse (Schraubmotor) inkl. Überwachung von Stillstand, Positionierfreigabe und NC-Fehlern.
-- Prozessüberwachung:
-  - Eindringtiefe der Schraube
-  - Drehmoment (geglättet)
-  - Nachlaufwinkel (zusätzliche Drehung nach Referenzpunkt)
-  - Watchdog (Timeouts)
-- Unterstützung verschiedener Betriebsarten (Voll-/Halbschraubung), Nachladen und Auswerfen.
-- Fehlerbehandlung und detaillierte Protokollierung (Historie).
+Der Baustein steuert einen Servoschrauber mit:
+- Überwachung von Eindringtiefe (wie tief die Schraube sitzt)
+- Überwachung des Drehmoments (geglättet, um Ausreißer zu vermeiden)
+- Überwachung der zusätzlichen Drehung (Nachlaufwinkel nach einem Referenzpunkt)
+- Zeitüberwachung (Watchdog), um Hängenbleiben zu verhindern
+- Nachladen/Auswerfen der Schraube, sichere Ausgänge, Fehler- und Ereignisprotokollierung
 
----
-
-## Architektur und Ablauf
-
-Der Baustein arbeitet als deterministische Zustandsmaschine mit nummerierten Schritten. Vereinfacht:
-
-- 0: Initialisierung
-- 10: Bereitschaft (Freigaben, Vorbereitungen, Auswahl Start: Schrauben/Nachladen/Auswerfen)
-- 55–70: Schraubphase mit laufender Prüfung (Tiefe/Drehmoment/Winkel)
-- 70: Anhalten/Stop (Motor Halt, Logging)
-- 100: Fertig
-- 200 ff.: Auswurfsequenz
-- < 0: Fehlerzustände
-
-Zur Veranschaulichung ein Flowchart des Kern-Schraubablaufs und der drei Schraubfälle:
-
-```mermaid
-flowchart TD
-  A([Start / Initialisierung])
-  B[Bereitschaft]
-  A --> B
-
-  %% Nebenabläufe
-  B -->|Auswerfen angefordert| AW[Auswurf-Sequenz]
-  AW --> B
-  B -->|Nachladen erforderlich| NL[Nachlade-Sequenz]
-  NL --> B
-
-  %% Schraubstart
-  B -->|Start Voll- / Halbschraubung| S[Schraubphase starten]
-  S --> M[Messungen & Überwachung:
-  - Eindringtiefe
-  - Drehmoment (geglättet)
-  - Zusatzdrehung (Winkel)
-  - Zeitüberwachung (Watchdog)]
-
-  M -->|Tiefe noch nicht OK, Drehmoment OK| F1
-  M -->|Tiefe OK, Drehmoment noch nicht OK| F2
-  M -->|Tiefe nicht OK, Drehmoment nicht OK| F3
-
-  %% Schraubfall 1
-  subgraph F1[Schraubfall 1: Drehmoment OK, Tiefe nicht OK]
-    F1a{Zusatzdrehung < große Obergrenze?}
-    F1a -- Nein --> E1F1[Fehler: Überdreht]
-    F1a -- Ja --> F1b{Ist Tiefe jetzt OK?}
-    F1b -- Ja --> STOP
-    F1b -- Nein --> F1c{Watchdog abgelaufen?}
-    F1c -- Ja --> T1[Fehler: Timeout (Tiefe nicht erreicht)]
-    F1c -- Nein --> A1[Aktion: Drehmoment moderat erhöhen]
-    A1 --> F1a
-  end
-
-  %% Schraubfall 2
-  subgraph F2[Schraubfall 2: Tiefe OK, Drehmoment nicht OK]
-    F2a{Zusatzdrehung < kleine Obergrenze?}
-    F2a -- Nein --> E1F2[Fehler: Überdreht]
-    F2a -- Ja --> F2b{Drehmoment OK UND Mindest-Nachdrehung erreicht?}
-    F2b -- Ja --> STOP
-    F2b -- Nein --> F2c{Watchdog abgelaufen?}
-    F2c -- Ja --> E2F2[Fehler: Timeout (Drehmoment nicht erreicht)]
-    F2c -- Nein --> F2a
-  end
-
-  %% Schraubfall 3
-  subgraph F3[Schraubfall 3: Tiefe nicht OK, Drehmoment nicht OK]
-    F3a{Zusatzdrehung < große Obergrenze?}
-    F3a -- Nein --> E1F3[Fehler: Überdreht]
-    F3a -- Ja --> F3b{Tiefe OK UND Drehmoment OK?}
-    F3b -- Ja --> STOP
-    F3b -- Nein --> F3c{Watchdog abgelaufen?}
-    F3c -- Ja --> E2F3[Fehler: Timeout]
-    F3c -- Nein --> F3d{Tiefe noch nicht OK?}
-    F3d -- Ja --> A3[Aktion: Drehmoment moderat erhöhen]
-    F3d -- Nein --> F3a
-    A3 --> F3a
-  end
-
-  %% Abschluss / Logging
-  STOP((Motor stoppen))
-  STOP --> LOG[Protokollieren:
-  - Tiefe, Drehmoment-Mittelwert, Winkel, Zeit
-  - Fehler-/Statusmeldungen setzen]
-  LOG --> DONE[Fertig / Zurück in Bereitschaft]
-  DONE --> B
-```
+Der eigentliche Schraubprozess verzweigt – abhängig von dem, was bereits erreicht wurde – in drei klar definierte Schraubfälle.
 
 ---
 
-## Prüf- und Auswertelogik
+## Kernprinzipien der Überwachung
 
-- Tiefenprüfung:
-  - Prüft, ob die erreichte Eindringtiefe im Sollbereich liegt (Mindesttiefe bis Solltiefe).
-  - Separate Minimalgrenzen z. B. für Aufsetzen und Halbschraubung.
+- Tiefe:
+  - Es gibt einen zulässigen Bereich vom Mindestniveau bis zur angestrebten Tiefe.
+  - Ziel: „Genug drin“, aber nicht über das zulässige Maß hinaus.
 
-- Drehmomentprüfung:
-  - Glättung über 10 Messwerte (gleitender Mittelwert), um kurze Peaks zu filtern.
-  - Vergleich des Mittelwerts mit dem Sollmoment.
+- Drehmoment:
+  - Es wird als gleitender Mittelwert über mehrere Messwerte bewertet (kein Rohwert).
+  - Ziel: Saubere, belastbare Vorspannung ohne Fehlentscheidungen durch kurze Peaks.
 
-- Drehwinkelprüfung:
-  - Ermittelt Zusatzdrehung ab einem gespeicherten Referenzpunkt.
-  - Mindest-Nachdrehung erforderlich.
-  - Obergrenzen verhindern Überdrehen (großzügig, wenn Tiefe fehlt; restriktiv, wenn Tiefe bereits passt).
+- Zusatzdrehung (Winkel):
+  - Gemessen als Differenz seit einem Merkmoment (z. B. seit „Tiefe erreicht“).
+  - Zwei Obergrenzen:
+    - Großzügig, wenn Tiefe noch fehlt (man „arbeitet“ noch).
+    - Restriktiv, wenn Tiefe bereits passt (nur noch „sauber vorspannen“).
+  - Mindest-Nachdrehung sorgt dafür, dass nicht „auf Kante“ gestoppt wird.
 
 - Watchdog:
-  - Zeitüberwachung der Schraubphase, führt bei Überschreitung zu definierten Fehlern.
+  - Setzt eine Obergrenze für die Schraubzeit in jedem Fall.
+  - Bei Überschreitung: definierter Abbruch mit Fehlermeldung.
 
 ---
 
-## Die 3 Schraubfälle
+## ASCII-Ablaufgrafik (Gesamt)
 
-1) Drehmoment OK, Tiefe nicht OK  
-- Ziel: Tiefe noch erreichen.  
-- Aktion: Weiterschrauben innerhalb einer großen Winkelobergrenze. Bei Bedarf Drehmomentvorgabe moderat erhöhen.  
-- Abbruch: Timeout oder Überdrehung.
-
-2) Tiefe OK, Drehmoment nicht OK  
-- Ziel: Drehmoment sauber aufbauen ohne Überdrehen.  
-- Aktion: Weiterschrauben innerhalb kleiner Winkelobergrenze (nur vorspannen).  
-- Abbruch: Timeout (Drehmoment nicht erreicht) oder Überdrehung.
-
-3) Tiefe nicht OK und Drehmoment nicht OK  
-- Ziel: Beide Kriterien erreichen.  
-- Aktion: Weiterschrauben mit großer Winkelobergrenze, bei ausbleibender Tiefe Drehmomentvorgabe moderat erhöhen.  
-- Abbruch: Timeout oder Überdrehung.
-
----
-
-## Schnittstellen
-
-### VAR_INPUT (Auszug, gruppiert)
-- Steuerung:
-  - I_bResetTeststation, I_bTaktFrg, I_bTaktStop, I_bAuto, I_bHand, I_bQuittFehler, I_bGrundstellung, I_bSchutzbereichOK
-- Prozessstart:
-  - I_bTaktStart (Vollschraubung), I_bTaktStartHalb (Halbschraubung)
-- Prozesssensorik:
-  - I_bGrdstlgSchrEinh (Grundstellung Schraubeinheit), I_bZustellZylAusgef (Zustellzylinder Endlage)
-- Parameter:
-  - I_fSchraubTiefeAuswurf, I_fTiefentoleranzPositiv/Negativ
-- Achsen:
-  - I_nAchsId, I_nEncId, I_stParam (Prozessparameterstruktur)
-- Erweiterungen:
-  - I_tAutoQuit, I_bSchraubeNachschiessen, I_bReferenzfahrtAktiv, I_bFreigabeAuswerfen
-- Logging:
-  - I_sDateipfad, I_bSchrauberLogOn, I_nMotorHersteller, I_bHuettenSchr
-
-### VAR_OUTPUT (Auszug)
-- Haupt:
-  - Q_bBusy, Q_bDone, Q_bError
-- Status:
-  - Q_sPosZustand, Q_bGrundstellungAktiv, Q_bGrundstellungOk, Q_sStatus
-- Aktorik:
-  - Q_bSchraubHub, Q_bSchrAuswurf, Q_bSchrHalt, Q_nTorque, Q_bAxisReset
-- Diagnose:
-  - Q_nErrorId, Q_bDrehmomentFehler, Q_bTuerFreigabe, Q_nStep, Q_strStep, Q_bModuloBetrArt
-
-### VAR_IN_OUT
-- IQ_fbObjSchlauch: Schnittstelle zum Schlauch-/Vereinzelungssystem
-- IQ_stMeldung: Meldungsstruktur des Schraubers
-
----
-
-## Wichtige Methoden
-
-- m_HandleReset: Behandelt Reset-Quellen (Nachrüttel-Taste, Test-Reset) und sperrt in kritischen Schritten.
-- m_Hauptablauf: Zustandsmaschine inkl. Startlogik, Betriebsartenwahl, Auswurf-/Nachladeabläufe, Schraubphase.
-- m_DrehmomentMittelwert: 10er-Gleitmittelwert des Drehmoments (nur aktiv in Prüfphase).
-- m_DrehmomentPruefung: Vergleicht geglättetes Moment mit Sollwert.
-- m_DrehwinkelPruefung: Ermittelt Zusatzdrehung und prüft Fenster (Mindest- und Maximalwinkel).
-- m_DrehmomentRechnung: Rechnet Antriebs-Drehmomentistwert (in 1/1000 I_rated) in Nm um.
-- m_DrehmomentVorgabe: Rechnet Sollmoment (Nm) in die Antriebseinheit (1/1000 I_rated) mit Skalierung.
-- m_AchsKommunikation: Kapselt Ein-/Ausgänge zur NC-Achse (Signalworte, Freigaben, Status).
-- m_DiagnoseHistorie: Speichert Historie (Tiefe, Fehlercode, Moment, Schraubzeit) bei Schraubende.
-- m_Fehlerbehandlung: Setzt/cleart spezifische Fehlerbausteine und Aggregat-Fehlerflag.
-- m_Ausgangszuweisung: Zentrale, sicherheitsverriegelte Ausgangsführung.
-
-Hinweis: Im Code sind weitere Hilfsmethoden/Timer vorgesehen (Stillstandsüberwachung, Logging, Schraubtaktmessung).
-
----
-
-## Parametrierung und Formeln
-
-### Umrechnung Drehmoment (Ist)
-Formel gemäß Beckhoff-Doku (Index 0x8010:54 = 0):
 ```
-M[Nm] = ((TorqueActual/1000) * (I_rated/√2)) * torque_constant
++------------------+
+| Start/Init       |
++--------+---------+
+         |
+         v
++------------------+       +---------------------+       +-------------------+
+| Bereitschaft     |-----> | Auswurf-Sequenz     | ----> | zurück Bereitschaft|
++----+----+--------+       +---------------------+       +-------------------+
+     |    |
+     |    +-----------> Nachlade-Sequenz ----------+
+     |                                            |
+     |                                            v
+     +-----------------> Schraubphase starten  --------+
+                                                     |
+                                                     v
+                                         +-----------------------------+
+                                         | Messen & Überwachen:        |
+                                         | - Tiefe                     |
+                                         | - Drehmoment (geglättet)    |
+                                         | - Zusatzdrehung (Winkel)    |
+                                         | - Watchdog (Zeit)           |
+                                         +---------------+-------------+
+                                                         |
+             +-------------------------------------------+-------------------------------------------+
+             |                                                                                       |
+             v                                                                                       v
+   [Fall 1] Drehmoment OK,                                                              [Fall 2] Tiefe OK,
+         Tiefe noch nicht OK                                                           Drehmoment noch nicht OK
+             |                                                                                       |
+             v                                                                                       v
+       (siehe unten)                                                                             (siehe unten)
+
+             +-------------------------------------------------------------------------------------------+
+             |                                                                                           |
+             v                                                                                           v
+   [Fall 3] Weder Tiefe noch Drehmoment OK                                                       (siehe unten)
+             |
+             v
+        (siehe unten)
+
+
+                       +--------------------------+
+                       | Motor stoppen / Loggen  |
+                       +-----------+--------------+
+                                   |
+                                   v
+                         zurück zur Bereitschaft
 ```
 
-### Umrechnung Drehmoment (Soll → Limitierung)
-Inverse Umrechnung inkl. Skalierung:
+---
+
+## Die 3 Schraubfälle – ausführlich
+
+Gemeinsamkeiten:
+- Jeder Fall läuft unter Zeitüberwachung (Watchdog).
+- Während des Weiterdrehens werden die aktuell relevanten Kriterien laufend geprüft.
+- Bei Überdrehung oder abgelaufener Zeit wird sauber gestoppt und ein Fehler gemeldet.
+- Wenn Tiefe noch fehlt, darf die Drehmomentvorgabe moderat angehoben werden (kontrolliert und begrenzt), um das „Durchkommen“ zu unterstützen.
+
+Wichtige Begriffe hier:
+- „Große Winkelobergrenze“: großzügig, z. B. bis ungefähr zwei Umdrehungen. Einsatz: Tiefe fehlt noch.
+- „Kleine Winkelobergrenze“: restriktiv, z. B. bis ungefähr eine halbe Umdrehung. Einsatz: Tiefe ist bereits OK.
+
+### Fall 1: Drehmoment OK, Tiefe noch nicht OK
+
+Einstieg:
+- Das System erkennt: Vorspannung ist grundsätzlich da (Drehmoment passt), aber die Schraube sitzt noch nicht tief genug.
+
+Ziel:
+- Die fehlende Tiefe erreichen, ohne zu überdrehen.
+
+Arbeitsfenster:
+- Zusatzdrehung ist erlaubt bis zur großen Obergrenze.
+- Mindest-Nachdrehung ist implizit erfüllt (Drehmoment ist ja bereits OK), Fokus liegt auf Tiefe.
+
+Ablauf (vereinfachtes ASCII-Diagramm):
 ```
-TorqueLimit(1/1000 I_rated) = ((M_soll / torque_constant) / (I_rated / √2)) * 1000 * Skalierung
+[Start Fall 1]
+      |
+      v
++-------------------------------+
+| Zusatzdrehung < große Grenze? |
++---------+---------------------+
+          |Ja
+          v
+   +------------------------+
+   | Tiefe jetzt erreicht?  |
+   +-----+------------------+
+         |Ja                      Nein
+         v                        |
+  [Motor stoppen]                 v
+      |                      +-------------------+
+      |                      | Watchdog abgelaufen? |
+      |                      +----+--------------+
+      |                           |Ja
+      |                           v
+      |                      [Fehler: Timeout]
+      |                           ^
+      |                           |
+      |                      Nein |
+      |                           v
+      |                  [Drehmoment moderat erhöhen]
+      |                           |
+      +---------------------------+
 ```
 
-- Typische Skalierungsstrategie:
-  - Start mit leicht abgesenkter oder erhöhter Vorgabe (Schutz vor Peaks/Überdrehen).
-  - Bei ausbleibender Tiefe: begrenzte Erhöhung freigeben.
+Reaktionen:
+- Wenn die Tiefe noch nicht kommt, darf die Vorgabe für das Drehmoment innerhalb sicherer Grenzen leicht erhöht werden.
+- Überschreitung der großen Winkelobergrenze führt sofort zum Abbruch „Überdreht“.
 
-### Winkelgrenzen
-- Große Obergrenze (wenn Tiefe noch fehlt): z. B. 720° (≈ 2 Umdrehungen).
-- Kleine Obergrenze (wenn Tiefe passt): z. B. 180°.
-
-### Drehzahlreduktion
-- Reduktion nach „Tiefe OK“ (feineres Positionieren).
-- Separate Reduktion für Halbschraubung.
-
-### Mindesttiefen
-- Mindesttiefe für Aufsetzen inkl. Toleranz.
-- Mindest-/Maximalbereiche je Schraubstrategie (Voll/Halb).
+Typische Ursachen/Tuning:
+- Mechanische Hemmnisse, Reibung, Materialschwankungen.
+- Tuning: leichte Drehmomentanhebung zulassen; evtl. Drehzahl moderat anpassen; große Obergrenze so wählen, dass noch „Arbeit“ möglich ist, aber kein Risiko für Bauteil/Schraube entsteht.
 
 ---
 
-## Fehler- und Ereignismanagement
+### Fall 2: Tiefe OK, Drehmoment noch nicht OK
 
-- Spezifische Fehler (Beispiele, gemäß Code):
-  - -40: Fehler Nachladen
-  - -45: Langsame Geschwindigkeit nicht erreicht
-  - -50: Tiefe für Solldrehzahl nicht erreicht
-  - -60: Solltiefe nicht erreicht
-  - -61: Solltiefe überschritten
-  - -65: Solldrehmoment nicht erreicht
-  - -80: Fehler Schrauberstange (Heben/Senken)
-  - -210: Fehler Auswerfen
-- Dynamische Fehler in Schraubfällen:
-  - -1261, -1262, -1263: Winkelobergrenze überschritten in Fall 1/2/3
-  - -61x / -62x / -63x: Timeout-/Kontextfehler je Fall
-- Aggregierte Anzeige:
-  - Q_bError aktiv bei Fehler und wenn Log-Modus nicht explizit aktiv ist.
-- Historie:
-  - Speicherung der letzten ~100 Schraubvorgänge (Tiefe, Fehlercode, Moment, Zeit).
+Einstieg:
+- Die Schraube sitzt in der gewünschten Tiefe; es fehlt nur noch die definierte Vorspannung.
 
----
+Ziel:
+- Das geforderte Drehmoment aufbauen, ohne die Schraube „weiter reinzudrehen“ und zu überdrehen.
 
-## Inbetriebnahme-Hinweise
+Arbeitsfenster:
+- Zusatzdrehung nur innerhalb der kleinen Obergrenze erlaubt.
+- Mindest-Nachdrehung ist erwünscht, damit nicht „auf Kante“ gestoppt wird.
 
-1) Antriebsdaten prüfen:
-- Nennstrom (I_rated) und Motorkonstante korrekt parametrieren.
-- Richtung/Kodierung des Winkel-/Positionsfeedbacks prüfen.
+Ablauf (vereinfachtes ASCII-Diagramm):
+```
+[Start Fall 2]
+      |
+      v
++-------------------------------+
+| Zusatzdrehung < kleine Grenze?|
++---------+---------------------+
+          |Ja
+          v
+   +------------------------------+
+   | Drehmoment OK UND Mindest-   |
+   | Nachdrehung erreicht?        |
+   +-----+------------------------+
+         |Ja                         Nein
+         v                           |
+  [Motor stoppen]                    v
+      |                        +-------------------+
+      |                        | Watchdog abgelaufen? |
+      |                        +----+--------------+
+      |                             |Ja
+      |                             v
+      |                        [Fehler: Timeout]
+      |                             ^
+      +-----------------------------+
+            Nein (weiter prüfen)
+```
 
-2) Sicherheitsfreigaben:
-- Schutzbereich-Signale und Türfreigabe-Logik testen.
-- NC-Fehler-/Freigabepfade (Positionierfreigabe, DC-Status) prüfen.
+Reaktionen:
+- Keine Drehmomentanhebung nötig, die Tiefe ist ja bereits erreicht; es geht nur noch um sauberes Anziehen.
+- Überschreitung der kleinen Obergrenze führt sofort zum Abbruch „Überdreht“.
 
-3) Prozessparameter:
-- Sollmoment, Winkelgrenzen, Tiefenfenster und Toleranzen schrittweise einregeln.
-- Reduktionsfaktoren für Drehzahl sinnvoll wählen (Feinpositionierung).
-
-4) Tests:
-- Halbschraubung separat testen (kleineres Fenster, andere Tiefe).
-- Nachladen/Auswerfen-Funktionen unter Störung testen.
-
-5) Logging:
-- Dateipfade, Log-Modus und Historie prüfen (zur Qualitätssicherung).
-
----
-
-## Troubleshooting (Kurz)
-
-- „Drehmoment nicht erreicht“:
-  - Mechanische Hemmnisse? Zu geringe Vorgabe? Skalierung/Drehzahl prüfen.
-  - Prüfen, ob die kleine Winkelobergrenze zu restriktiv ist (Fall 2).
-
-- „Tiefe nicht erreicht“:
-  - Vorschub/Pneumatik und Aufsetzen prüfen.
-  - Gegebenenfalls Drehmomentvorgabe moderat erhöhen (Begrenzung beachten).
-
-- „Überdreht“:
-  - Winkelobergrenzen reduzieren oder Mindest-Nachdrehung anpassen.
-  - Früheres Umschalten auf „Tiefe OK“-Fenster sicherstellen.
-
-- Häufige Timeouts:
-  - Watchdog-Zeiten plausibilisieren.
-  - Antriebsfreigabe/Stillstandsüberwachung prüfen.
+Typische Ursachen/Tuning:
+- Zu restriktives Winkel-Fenster, zu niedrige Drehmomentvorgabe, zu starke Dämpfung.
+- Tuning: kleine Obergrenze so wählen, dass das Drehmoment aufgebaut werden kann, ohne die Verbindung unnötig weiter zu drehen; Mindest-Nachdrehung sinnvoll wählen.
 
 ---
 
-## Changelog (aus Header)
+### Fall 3: Weder Tiefe noch Drehmoment OK
 
-- 17/09/2025 – v1.00 – First release
-- 18/09/2025 – v1.01 – Erste erfolgreiche Verschraubungen mit Scope
-- 19/09/2025 – v1.02 – Diverses
+Einstieg:
+- Weder Tiefe noch Drehmoment sind im grünen Bereich. Es muss beides erreicht werden.
+
+Ziel:
+- Erst die Tiefe sicherstellen und gleichzeitig das Drehmoment in den Sollbereich bringen – effizient, aber ohne Überdrehen.
+
+Arbeitsfenster:
+- Zusatzdrehung ist erlaubt bis zur großen Obergrenze (ähnlich Fall 1).
+
+Ablauf (vereinfachtes ASCII-Diagramm):
+```
+[Start Fall 3]
+      |
+      v
++-------------------------------+
+| Zusatzdrehung < große Grenze? |
++---------+---------------------+
+          |Ja
+          v
+   +-----------------------------------+
+   | Tiefe OK UND Drehmoment OK ?      |
+   +-----+-----------------------------+
+         |Ja                               Nein
+         v                                 |
+  [Motor stoppen]                          v
+      |                              +-------------------+
+      |                              | Watchdog abgelaufen? |
+      |                              +----+--------------+
+      |                                   |Ja
+      |                                   v
+      |                              [Fehler: Timeout]
+      |                                   ^
+      |                                   |
+      |                              Nein |
+      |                                   v
+      |                        +--------------------------+
+      |                        | Tiefe noch nicht OK ?    |
+      |                        +----+---------------------+
+      |                             |Ja
+      |                             v
+      |                  [Drehmoment moderat erhöhen]
+      |                             |
+      +-----------------------------+
+                Nein (weiter prüfen)
+```
+
+Reaktionen:
+- Wenn Tiefe ausbleibt, ist eine moderate, befristete Anhebung der Drehmomentvorgabe erlaubt.
+- Überschreitung der großen Obergrenze führt sofort zum Abbruch „Überdreht“.
+
+Typische Ursachen/Tuning:
+- Kombination aus Reibung, Material, Geometrie; eventuell zu niedrige Startvorgaben.
+- Tuning: begrenzte Drehmomentanhebung für „Durchkommen“, große Obergrenze korrekt dimensionieren.
 
 ---
 
-## Datei/Referenz
+## Typische Fehlerbilder und Reaktionen
 
-- Baustein: [FB_Schrauber_PnP_3.TcPOU](https://github.com/NKAutomations/Servo_Schienenschrauber_Entwickelung/blob/36b534d5bd3ecd58059b0af279687edaf51e5fbf/src/POUs/SchrauberAblauf/FB_Schrauber_PnP_3.TcPOU)
+- Timeout (Zeit überschritten):
+  - Fallbezogener Abbruch mit entsprechendem Hinweis (z. B. „Tiefe/Drehmoment nicht erreicht“).
+  - Prüfen: Freigaben, Mechanik, Parameter, Drehzahl.
 
-Bei Bedarf kann ein PR erstellt werden, der diese README im Repo ergänzt (z. B. im Ordner `docs/` oder direkt neben dem Baustein).
+- Überdrehung (Winkelobergrenze überschritten):
+  - Sofortiger Abbruch.
+  - Prüfen: Grenzen realitätsnah parametrieren (klein/groß), Mindest-Nachdrehung, Umschaltpunkte.
+
+- Tiefe nicht erreicht:
+  - Prüfen: Vorschub, Aufsetzen, Bauteiltoleranzen.
+  - Maßvoll Drehmomentvorgabe anheben (nur solange Tiefe fehlt, niemals unkontrolliert).
+
+- Drehmoment nicht erreicht:
+  - Prüfen: Reibwerte, Material, ggf. zu restriktives Winkel-Fenster im Fall 2.
+
+---
+
+## Parametrier- und Tuninghinweise
+
+- Winkelobergrenzen:
+  - Großzügige Grenze (wenn Tiefe fehlt): erlaubt „Arbeit“ am Bauteil; Erfahrungswert z. B. bis ca. zwei Umdrehungen.
+  - Kleine Grenze (wenn Tiefe passt): begrenzt Nachlauf; Erfahrungswert z. B. bis ca. eine halbe Umdrehung.
+
+- Mindest-Nachdrehung:
+  - Verhindert Stop genau am Schwellwert; sorgt für reproduzierbares Setzen der Verbindung.
+
+- Drehmomentvorgabe:
+  - Anfangs realistisch wählen; bei Tiefe-Problemen in Fall 1/3 moderat erhöhen (mit Obergrenzen).
+  - Drehmomentbewertung immer als geglätteter Mittelwert denken (Peaks ignorieren).
+
+- Drehzahlreduktion:
+  - Nach „Tiefe OK“ sinnvoll, um feinfühlig das Moment aufzubauen (Vermeidung von Überschwingen).
+
+- Watchdog:
+  - Realistisch zur Applikation wählen, damit Abbrüche echte Fehler abbilden und keine „falschen Positiven“ erzeugen.
+
+---
+
+## Inbetriebnahme-Checkliste
+
+- Sicherheitskette / Schutzbereich geprüft (Freigaben, Türlogik)?
+- Antrieb bereit, Fehlerpfade getestet (Freigaben, Stillstandserkennung)?
+- Sensorik plausibel (Tiefe, Position, Drehmomentanzeige)?
+- Parameter grob eingestellt:
+  - Sollmoment, Mindest-/Solltiefe, Mindest-Nachdrehung
+  - Winkelobergrenzen (klein/groß)
+  - Watchdog-Zeiten
+- Test Vollschraubung und Halbschraubung getrennt durchführen.
+- Fehlerfälle gezielt provozieren (Timeout/Überdrehung) und Reaktionen prüfen.
+- Historie/Protokollierung verifizieren (Tiefe, Moment, Zeit, Fehler).
+
+---
+
+## Referenz
+
+- Baustein-Datei: [src/POUs/SchrauberAblauf/FB_Schrauber_PnP_3.TcPOU](https://github.com/NKAutomations/Servo_Schienenschrauber_Entwickelung/blob/36b534d5bd3ecd58059b0af279687edaf51e5fbf/src/POUs/SchrauberAblauf/FB_Schrauber_PnP_3.TcPOU)
+
+Hinweis: Diese README beschreibt den Funktionsablauf bewusst ohne interne Variablennamen. Sie eignet sich zur Weitergabe an Bediener, QS und Kollegen aus Mechanik/Elektrik.
