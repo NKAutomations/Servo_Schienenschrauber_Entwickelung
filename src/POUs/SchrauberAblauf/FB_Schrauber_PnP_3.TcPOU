@@ -2,49 +2,27 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
   <POU Name="FB_Schrauber_PnP_3" Id="{0b92a747-23a0-4164-aeaa-2bfe58c28f89}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Schrauber_PnP_3
-(*	Abgeändert vom Original Ablauf
-	Händisch angepasste Version, Mit Chat GPT5 in Methoden Unterteilt.
-	
+(*======================================================================================================================================*)
+(*//=============================================================================\\
+||  _   _ _  __  _         _                        _   _                      ||
+|| | \ | | |/ / / \  _   _| |_ ___  _ __ ___   __ _| |_(_) ___  _ __         ||
+|| |  \| | ' / / _ \| | | | __/ _ \| '_ ` _ \ / _` | __| |/ _ \| '_ \        ||
+|| | |\  | . \/ ___ \ |_| | || (_) | | | | | | (_| | |_| | (_) | | | |       ||
+|| |_| \_|_|\_\_/  \_\__,_|\__\___/|_| |_| |_|\__,_|\__|_|\___/|_| |_|       ||
+||                                                                             ||
+\\=============================================================================//
+SERVOSCHRAUBER PICK-AND-PLACE - MÖBELINDUSTRIE 
 ================================================================================
-SERVOSCHRAUBER PICK-AND-PLACE - MÖBELINDUSTRIE
-================================================================================
-Beschreibung:	Vollautomatischer Servoschrauber für Schienen- und Einzelschrauben
-				mit NC-Achsenanbindung, Drehmoment- und Tiefenüberwachung
-				
-Autor:			Überarbeitet für bessere Wartbarkeit und Übersichtlichkeit
-Datum:			September 2025
-Version:		2.0
+Vollautomatischer Servoschrauber für Schienen- und Einzelschrauben
+				mit NC-Achsenanbindung, Drehmoment- und Tiefenüberwachung 
+================================================================================*)
 
-ABLAUFBESCHREIBUNG:
-===================
-1. INITIALISIERUNG		(Step 0)    - Reset aller Ausgänge, Grundzustand
-2. BEREITSCHAFT			(Step 10)   - Warten auf Startbedingungen
-3. NACHLADEN			(Step 11-12)- Schraube aus Schlauch nachladen
-4. SCHRAUBSTART			(Step 20)   - Vorbereitung Schraubvorgang
-5. ZUSTELLUNG			(Step 30)   - Schraubhub ausfahren
-6. AUFSETZEN			(Step 40)   - Auswurfhub bis Werkstück
-7. ANLAUFPHASE			(Step 45)   - Langsame Drehzahl aufbauen
-8. HAUPTSCHRAUBEN		(Step 50)   - Volldrehzahl erreichen
-9. TIEFENPRÜFUNG		(Step 60)   - Solltiefe überwachen
-10. DREHMOMENTPRÜFUNG	(Step 65)   - Sollmoment erreichen
-11. MOTORSTOPP			(Step 70-75)- Kontrolliertes Stoppen
-12. RÜCKFAHRT			(Step 80-85)- Zurück in Grundstellung
-13. REFERENZIERUNG		(Step 90-95)- Achse referenzieren
-14. ABSCHLUSS			(Step 100)  - Vorgang beendet
-15. AUSWERFEN			(Step 200ff)- Schraube entfernen
-16. FEHLERBEHANDLUNG	(Step -xx)  - Zentrale Fehlerbehandlung
-
-SICHERHEITSFUNKTIONEN:
-======================
-- Watchdog-Timer für alle kritischen Schritte
-- Überwachung von Schutzbereich und NC-Status
-- Drehmomentbegrenzung und -überwachung
-- Tiefentoleranzprüfung
-- Automatische Fehlerquittierung (optional)
-- Deterministische Zustandsmaschine
-================================================================================
-*)
-
+(*Date          | Version    		| created under     | Author       		| Remark *)
+(*====================================================================================================================================================*)
+(*17/09/2025   	| 1.00      		| TC3		  		| N.Kersting       	| first release *)
+(*18/09/2025   	| 1.01      		| TC3		  		| N.Kersting      	| Erste erfolgreiche Verschraubungen mit Scope *)
+(*19/09/2025   	| 1.02      		| TC3		  		| N.Kersting      	|  *)
+(*====================================================================================================================================================*)
 VAR_INPUT
 	(* === STEUERUNGSEINGÄNGE === *)
 	I_bResetTeststation				: BOOL;		(* Test-Reset für Steuerungstechniker-Büro *)
