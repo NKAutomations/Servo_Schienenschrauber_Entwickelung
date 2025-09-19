@@ -179,12 +179,13 @@ VAR
 	nAnzahlSchraubspitzenKlemmer	: DINT;		(* Zähler für Schraubspitzenklemmer *)
 	
 	(* === Drehmoment Parameter === *)
-	nDrehmomentKonstante			: LREAL	:= 0.2; (*0x8011:16	*)
-	nNennleistungMotor				: LREAL	:= 4;	(*0x8011:12	*)
+	nDrehmomentKonstante			: LREAL	:= 0.2;		(*0x8011:16	*)
+	nNennleistungMotor				: LREAL	:= 4;		(*0x8011:12	*)
 	nDrehmomentSkalierVorgabe		: LREAL := 1.25;	(* 10% Mehr Drehmoment als das Solldrehmoment *)
-	nSollDrehmomentErrechnet		: LREAL;		(* Der errechnete Drehmomentwert, Rechnet Drehmoment (Nm) um in Prozessdaten kompatibelen wert für den Antrieb! *)
-	nDrehmomentErhoehung			: LREAL := 0.4;
-	bDrehmomentErhoehen				: BOOL;
+	nSollDrehmomentErrechnet		: LREAL;			(* Der errechnete Drehmomentwert, Rechnet Drehmoment (Nm) um in Prozessdaten kompatibelen wert für den Antrieb! *)
+	nDrehmomentErhoehung			: LREAL := 0.4;		(* Wird auf das Sollmoment addiert um bei nicht erreichen der Tiefe, zu reagieren und Tiefer zu kommen *)
+	nDrehmomentSkalVerringern		: LREAL := 0.85;	(*  *)
+	bDrehmomentErhoehen				: BOOL;				(* Merker Drehmoment erhöhen *)
 	
 	(* === Tiefen Parameter === *)
 	nMinimalAufsetztiefe			: LREAL := 10;	(* MinimalTiefe für Aufsetzen OK *)
@@ -192,7 +193,6 @@ VAR
 	
 	nMinimalSchraubtiefe			: LREAL := -10;
 	nMinimalSchraubtiefeHalb		: LREAL := 10;
-	
 	
 	(* === Prozessparameter zur Schraubfall auswertung === *)
 	nAuswertungTiefeMem				: LREAL;	(* Gemerkte Tiefe für Auswertung in Step 60 *)
@@ -212,7 +212,7 @@ VAR
 	nPD_Drehmoment					: LREAL;			(* Prozessdaten - erreichtes Drehmoment *)
 	nPD_Drehwinkel					: LREAL;			(* Prozessdaten - erreichter Drehwinkel *)
 	
-	
+	(* === Schraubfall === *)
 	nSchraubFallMerker				: INT;
 	
 	
@@ -289,6 +289,197 @@ m_Ausgangszuweisung();
 
 ]]></ST>
     </Implementation>
+    <Folder Name="Schraubfall" Id="{51583300-f895-4190-bfb2-3128edad81ca}" />
+    <Action Name="ac_Schraubfall1" Id="{dbecdb19-3742-44e5-b2f4-f647f98882b3}" FolderPath="Schraubfall\">
+      <Implementation>
+        <ST><![CDATA[(*================================================================================================================*)
+(* === Drehwinkelprüfung&  Drehmoment Prüfung === *)
+sStep := 'Schraubfall 1 Starten- Moment Ok Tiefe nicht Ok';
+
+(* Watchdog für Schraubvorgang *)
+tonTimeOver1(
+	IN := TRUE, 
+	PT := I_stParam.tParam_ZeitdSchraubTakt);
+	
+Q_nTorque := LREAL_TO_INT(nSollDrehmomentErrechnet );	(* Drehmoment wieder Setzen damit der Motor Weiter drehen kann *)
+
+(* Aufruf Drehwinkel Prüfen *)
+m_DrehwinkelPruefung(
+	nPosAct:= 			NC_Axis_IN_nActPos, 
+	nPosMem:= 			nAuswertungPosMem, 
+	nPosSoll:= 			nSollDrehwinkelNachTiefeOK, 
+	nMaxDrehwinkel :=	nMaxDrehwinkelNachTiefeOk_F1,
+	bWinkelOk=> 		bDrehwinkelOkMem,
+	nWinkelAct=>		nDrehwinkelMem);
+
+(* Aufruf Drehwinkel Prüfen *)
+m_TiefenPruefung(
+	nSolltiefeMin:= 	nMinimalSchraubtiefe, 
+	nSolltiefeMax:= 	I_stParam.fParam_Sollschraubtiefe, 
+	nToleranz:= 		0,	 
+	nActTiefe:= 		fSchraubTiefeIst, 
+	bTiefeOk=> 			bTiefeOkMem);
+
+IF 	ABS(nDrehwinkelMem) <nMaxDrehwinkelNachTiefeOk_F1	(* Nur abfragen ob nicht überdreht *)
+	AND bTiefeOkMem
+THEN 	
+	Q_nTorque := 0;
+	nStep := 70;
+ELSIF
+	tonTimeOver1.Q
+THEN
+	nStep := 70;	(* -> Motor stoppen *)
+	nFehlerSchrittMerker := -61;	(* Fehlercode merken Timeout*)
+ELSIF
+	NOT bTiefeOkMem
+	AND NOT bDrehwinkelOkMem
+	AND ABS(nDrehwinkelMem) <nMaxDrehwinkelNachTiefeOk_F1
+THEN
+	(* Drehmoment erhöhen, damit die Schraube Tiefe kommt *)
+	(* Drehmoment Vorgabe errechent*)
+	m_DrehmomentVorgabe(
+		nSkalierung :=			nDrehmomentSkalierVorgabe,
+		nTorque:= 				(I_stParam.fParam_Sollmoment*nDrehmomentSkalierVorgabe)+nDrehmomentErhoehung, 
+		nRatedCurrentMotor:= 	nNennleistungMotor, 
+		nTorqueConstant:= 		nDrehmomentKonstante, 
+		nTorqueLimitation=> 	nSollDrehmomentErrechnet);
+	
+	bDrehmomentErhoehen := TRUE;
+		
+ELSIF
+	NOT bDrehwinkelOkMem
+	AND ABS(nDrehwinkelMem) >nMaxDrehwinkelNachTiefeOk_F1
+THEN
+	(* Wenn Drehwinkel Überschritten-> Direkt Anhalten *)
+	nStep := 70;	(* -> Motor stoppen *)
+	nFehlerSchrittMerker := -1261;	(* Fehlercode merken Drehwinkel Überschritten Fall 1*)			
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ac_Schraubfall2" Id="{9b780de6-bebf-4f00-a106-069c03e6b06c}" FolderPath="Schraubfall\">
+      <Implementation>
+        <ST><![CDATA[(*================================================================================================================*)
+(* === Drehwinkelprüfung&  Drehmoment Prüfung === *)
+sStep := 'Schraubfall 2 Starten- Moment nioht Ok Tiefe Ok';
+
+(* Watchdog für Schraubvorgang *)
+tonTimeOver1(
+	IN := TRUE, 
+	PT := I_stParam.tParam_ZeitdSchraubTakt);
+					
+Q_nTorque := LREAL_TO_INT(nSollDrehmomentErrechnet);	(* Drehmoment wieder Setzen damit der Motor Weiter drehen kann *)
+
+(* Aufruf Drehmoment Prüfen *)
+m_DrehmomentPruefung(
+	nDrehmomentSoll:= 		I_stParam.fParam_Sollmoment, 
+	bDrehmomentOk=> 		bDrehmomOkMem);
+	
+(* Aufruf Drehwinkel Prüfen *)
+m_DrehwinkelPruefung(
+	nPosAct:= 			NC_Axis_IN_nActPos, 
+	nPosMem:= 			nAuswertungPosMem, 
+	nPosSoll:= 			nSollDrehwinkelNachTiefeOK, 
+	nMaxDrehwinkel :=	nMaxDrehwinkelNachTiefeOk_F2,
+	bWinkelOk=> 		bDrehwinkelOkMem,
+	nWinkelAct=>		nDrehwinkelMem);
+					
+IF 	bDrehwinkelOkMem
+	AND bDrehmomOkMem
+THEN 
+	Q_nTorque := 0;
+	nStep := 70;
+ELSIF
+	tonTimeOver1.Q
+THEN
+	IF NOT bDrehmomOkMem
+	THEN
+		nStep := 70;	(* -> Motor stoppen *)
+		nFehlerSchrittMerker := -1162;	(* Fehlercode merken Timeout Drehmoment nicht OK Fall 2*)	
+	ELSE
+		nFehlerSchrittMerker := -62;	(* Fehlercode merken Timeout Fall 2*)		
+	END_IF
+ELSIF
+	NOT bDrehwinkelOkMem
+	AND ABS(nDrehwinkelMem) >nMaxDrehwinkelNachTiefeOk_F2
+THEN
+	(* Wenn Drehwinkel Überschritten-> Direkt Anhalten *)
+	nStep := 70;	(* -> Motor stoppen *)
+	nFehlerSchrittMerker := -1262;	(* Fehlercode merken Drehwinkel Überschritten Fall 2*)			
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ac_Schraubfall3" Id="{efd50f45-50f2-4675-b11d-f586dd145b4b}" FolderPath="Schraubfall\">
+      <Implementation>
+        <ST><![CDATA[(*================================================================================================================*)
+(* === Drehwinkelprüfung&  Drehmoment Prüfung === *)
+sStep := 'Schraubfall 3 Starten- Moment nicht Ok und Tiefe nicht Ok';
+		
+(* Watchdog für Schraubvorgang *)
+tonTimeOver1(
+	IN := TRUE, 
+	PT := I_stParam.tParam_ZeitdSchraubTakt);
+	
+Q_nTorque := LREAL_TO_INT(nSollDrehmomentErrechnet );	(* Drehmoment wieder Setzen damit der Motor Weiter drehen kann *)
+
+(* Aufruf Drehmoment Prüfen *)
+m_DrehmomentPruefung(
+	nDrehmomentSoll:= 		I_stParam.fParam_Sollmoment, 
+	bDrehmomentOk=> 		bDrehmomOkMem);
+	
+(* Aufruf Drehwinkel Prüfen *)
+m_DrehwinkelPruefung(
+	nPosAct:= 			NC_Axis_IN_nActPos, 
+	nPosMem:= 			nAuswertungPosMem, 
+	nPosSoll:= 			nSollDrehwinkelNachTiefeOK, 
+	nMaxDrehwinkel :=	nMaxDrehwinkelNachTiefeOk_F1,
+	bWinkelOk=> 		bDrehwinkelOkMem,
+	nWinkelAct=>		nDrehwinkelMem);
+
+(* Aufruf Drehwinkel Prüfen *)
+m_TiefenPruefung(
+	nSolltiefeMin:= 	nMinimalSchraubtiefe, 
+	nSolltiefeMax:= 	I_stParam.fParam_Sollschraubtiefe, 
+	nToleranz:= 		0,	 
+	nActTiefe:= 		fSchraubTiefeIst, 
+	bTiefeOk=> 			bTiefeOkMem);
+
+IF 	ABS(nDrehwinkelMem) <nMaxDrehwinkelNachTiefeOk_F1	(* Nur abfragen ob nicht überdreht *)
+	AND bTiefeOkMem
+	AND bDrehmomOkMem	(* Hier noch als Zusatz *)
+THEN 	
+	Q_nTorque := 0;
+	nStep := 70;
+ELSIF
+	tonTimeOver1.Q
+THEN
+	nStep := 70;	(* -> Motor stoppen *)
+	nFehlerSchrittMerker := -63;	(* Fehlercode merken Timeout*)
+ELSIF
+	NOT bTiefeOkMem
+	AND NOT bDrehwinkelOkMem
+	AND ABS(nDrehwinkelMem) <nMaxDrehwinkelNachTiefeOk_F1
+THEN
+	(* Drehmoment erhöhen, damit die Schraube Tiefe kommt *)
+	(* Drehmoment Vorgabe errechent*)
+	m_DrehmomentVorgabe(
+		nSkalierung :=			nDrehmomentSkalierVorgabe,
+		nTorque:= 				(I_stParam.fParam_Sollmoment*nDrehmomentSkalierVorgabe)+nDrehmomentErhoehung, 
+		nRatedCurrentMotor:= 	nNennleistungMotor, 
+		nTorqueConstant:= 		nDrehmomentKonstante, 
+		nTorqueLimitation=> 	nSollDrehmomentErrechnet);
+	
+	bDrehmomentErhoehen := TRUE;
+		
+ELSIF
+	NOT bDrehwinkelOkMem
+	AND ABS(nDrehwinkelMem) >nMaxDrehwinkelNachTiefeOk_F1
+THEN
+	(* Wenn Drehwinkel Überschritten-> Direkt Anhalten *)
+	nStep := 70;	(* -> Motor stoppen *)
+	nFehlerSchrittMerker := -1263;	(* Fehlercode merken Drehwinkel Überschritten Fall 1*)			
+END_IF]]></ST>
+      </Implementation>
+    </Action>
     <Method Name="m_AchsKommunikation" Id="{a1c681a0-467c-42bd-a9f4-6d9dcad9e369}">
       <Declaration><![CDATA[METHOD m_AchsKommunikation
 VAR_INPUT
@@ -1092,6 +1283,14 @@ THEN
 			
 		NC_Axis_OUT_bAchsePosStarten := I_bTaktFrg;
 		
+		(* Drehmomentvorgabe errechnen, für die Kurze abbremsaktion in Schritt 60*) 
+		m_DrehmomentVorgabe(
+			nSkalierung :=			nDrehmomentSkalierVorgabe,
+			nTorque:= 				I_stParam.fParam_Sollmoment *nDrehmomentSkalVerringern, (* Drehmoment erst Senken um Überdrehen zu verhinder *) 
+			nRatedCurrentMotor:= 	nNennleistungMotor, 
+			nTorqueConstant:= 		nDrehmomentKonstante, 
+			nTorqueLimitation=> 	nSollDrehmomentErrechnet);
+		
 		(* Tiefenprüfung *)
 		IF I_bTaktStart
 		THEN
@@ -1116,25 +1315,13 @@ THEN
 		m_DrehmomentPruefung(
 			nDrehmomentSoll:= 		I_stParam.fParam_Sollmoment, 
 			bDrehmomentOk=> 		bDrehmomOkMem);
-			
-		(* Prozessdaten Tiefe Schreiben *)
-		IF fSchraubTiefeIst < nPD_Tiefe
-		THEN
-			nPD_Tiefe:=	fSchraubTiefeIst;
-		END_IF
-		
-		(* Prozessdaten Drehmoment Schreiben *)
-		IF fDrehmomentIstMittel >nPD_Drehmoment
-		THEN
-			nPD_Drehmoment :=	fDrehmomentIstMittel;
-		END_IF
-		
+					
 		IF bDrehmomOkMem
 			AND NOT bTiefeOkMem
 		THEN
 			(* Fall 1 Materialtoleranzen gehen ins Negative, Drehmoment ist erreicht, Schraubtiefe nicht -> Schraubenkopf steht über der Bohrung *)
 			tonTimeOver1(IN := FALSE);
-			Q_nTorque := 0; (* Motor Kurz anhalten über Moment *)
+			Q_nTorque := LREAL_TO_INT(nSollDrehmomentErrechnet); (* Motor Kurz anhalten über Moment *)
 			NC_Axis_OUT_nPTPVelo := I_stParam.fParam_Solldrehzahl * nSkalDrehzReduzTiefeOk;	
 			nStep := 60;
 			nSchraubFallMerker :=	1;
@@ -1144,7 +1331,7 @@ THEN
 		THEN
 			(*Fall 2 Materialtoleranzen gehen ins Negative, Solltiefe ist erreicht, Drehmoment nicht -> Schraubenkopf steht über der Bohrung *)
 			tonTimeOver1(IN := FALSE);
-			Q_nTorque := 0; (* Motor Kurz anhalten über Moment *)
+			Q_nTorque := LREAL_TO_INT(nSollDrehmomentErrechnet); (* Motor Kurz anhalten über Moment *)
 			NC_Axis_OUT_nPTPVelo := I_stParam.fParam_Solldrehzahl * nSkalDrehzReduzTiefeOk;	
 			nStep := 60;
 			nSchraubFallMerker :=	2;
@@ -1159,9 +1346,16 @@ THEN
 			 tonTimeOver1.Q 
 		THEN
 			(* Achtung Hier Sollte dann auch die Möglichkeit bestehen das Moment weiter zu erhöhen *)
-			tonTimeOver1(IN := FALSE);
+			(*tonTimeOver1(IN := FALSE);
 			nFehlerSchrittMerker := -55;	(* -> Timeout Kein Drehmoment und keine Tiefe *) (* Fehlercode merken *)
-			nStep := 70;	
+			nStep := 70;	*)
+			
+			(*Fall 3 Tiefe und Drehmoment nicht erreicht *)
+			tonTimeOver1(IN := FALSE);
+			Q_nTorque := LREAL_TO_INT(nSollDrehmomentErrechnet); (* Motor Kurz anhalten über Moment *)
+			NC_Axis_OUT_nPTPVelo := I_stParam.fParam_Solldrehzahl * nSkalDrehzReduzTiefeOk;	
+			nStep := 60;
+			nSchraubFallMerker :=	3;
 		END_IF
 (*================================================================================================================*)
 	60: (* === Warten Auf Velo Verringert === *)
@@ -1171,6 +1365,14 @@ THEN
 		tonTimeOver1(
 			IN := TRUE, 
 			PT := I_stParam.tParam_ZeitdSchraubTakt);
+			
+		(* Drehmomentvorgabe errechnen für die Weiterbearbeitung*) 
+		m_DrehmomentVorgabe(
+			nSkalierung :=			nDrehmomentSkalierVorgabe,
+			nTorque:= 				I_stParam.fParam_Sollmoment *nDrehmomentSkalierVorgabe, (* Drehmoment erst Senken um Überdrehen zu verhinder *) 
+			nRatedCurrentMotor:= 	nNennleistungMotor, 
+			nTorqueConstant:= 		nDrehmomentKonstante, 
+			nTorqueLimitation=> 	nSollDrehmomentErrechnet);
 			
 		NC_Axis_OUT_nPTPVelo := I_stParam.fParam_Solldrehzahl * nSkalDrehzReduzTiefeOk;	
 		
@@ -1186,175 +1388,18 @@ THEN
 			tonTimeOver1.Q
 		THEN			
 			tonTimeOver1(IN := FALSE);
-			nFehlerSchrittMerker := -60;	(* -> Timeout Kein Drehmoment und keine Tiefe *) (* Fehlercode merken *)
+			nFehlerSchrittMerker := -60;	(* -> Timeout Drehzahl Absenken *) (* Fehlercode merken *)
 			nStep := 70;	
 		END_IF
-			
+		
+(*================================================================================================================*)			
+	61:	(* === Schraubfall 1 === *) ac_Schraubfall1();	
+(*================================================================================================================*)			
+	62:	(* === Schraubfall 2 === *) ac_Schraubfall2();
+(*================================================================================================================*)			
+	63:	(* === Schraubfall 3 === *) ac_Schraubfall3();				
 (*================================================================================================================*)
-	61: (* === Drehwinkelprüfung&  Drehmoment Prüfung === *)
-		sStep := 'Schraubfall 1 Starten- Moment Ok Tiefe nicht Ok';
-		
-		(* Watchdog für Schraubvorgang *)
-		tonTimeOver1(
-			IN := TRUE, 
-			PT := I_stParam.tParam_ZeitdSchraubTakt);
-			
-		Q_nTorque := LREAL_TO_INT(nSollDrehmomentErrechnet );	(* Drehmoment wieder Setzen damit der Motor Weiter drehen kann *)
-		
-		(* Aufruf Drehwinkel Prüfen *)
-		m_DrehwinkelPruefung(
-			nPosAct:= 			NC_Axis_IN_nActPos, 
-			nPosMem:= 			nAuswertungPosMem, 
-			nPosSoll:= 			nSollDrehwinkelNachTiefeOK, 
-			nMaxDrehwinkel :=	nMaxDrehwinkelNachTiefeOk_F1,
-			bWinkelOk=> 		bDrehwinkelOkMem,
-			nWinkelAct=>		nDrehwinkelMem);
-		
-		(* Aufruf Drehwinkel Prüfen *)
-		m_TiefenPruefung(
-			nSolltiefeMin:= 	nMinimalSchraubtiefe, 
-			nSolltiefeMax:= 	I_stParam.fParam_Sollschraubtiefe, 
-			nToleranz:= 		0,	 
-			nActTiefe:= 		fSchraubTiefeIst, 
-			bTiefeOk=> 			bTiefeOkMem);
-	
-		(* Prozessdaten Drehwinkel Schreiben *)
-		IF nDrehwinkelMem> nPD_Drehwinkel
-		THEN
-			nPD_Drehwinkel :=	nDrehwinkelMem;
-		END_IF
-		
-		(* Prozessdaten Tiefe Schreiben *)
-		IF fSchraubTiefeIst < nPD_Tiefe
-		THEN
-			nPD_Tiefe:=	fSchraubTiefeIst;
-		END_IF
-		
-		(* Prozessdaten Drehmoment Schreiben *)
-		IF fDrehmomentIstMittel >nPD_Drehmoment
-		THEN
-			nPD_Drehmoment :=	fDrehmomentIstMittel;
-		END_IF
-		
-		IF 	ABS(nDrehwinkelMem) <nMaxDrehwinkelNachTiefeOk_F1	(* Nur abfragen ob nicht überdreht *)
-			AND bTiefeOkMem
-		THEN 	
-			Q_nTorque := 0;
-			nStep := 70;
-		ELSIF
-			tonTimeOver1.Q
-		THEN
-			nStep := 70;	(* -> Motor stoppen *)
-			nFehlerSchrittMerker := -61;	(* Fehlercode merken Timeout*)
-		ELSIF
-			NOT bTiefeOkMem
-			AND NOT bDrehwinkelOkMem
-			AND ABS(nDrehwinkelMem) <nMaxDrehwinkelNachTiefeOk_F1
-		THEN
-			(* Drehmoment erhöhen, damit die Schraube Tiefe kommt *)
-			(* Drehmoment Vorgabe errechent*)
-			m_DrehmomentVorgabe(
-				nSkalierung :=			nDrehmomentSkalierVorgabe,
-				nTorque:= 				(I_stParam.fParam_Sollmoment*nDrehmomentSkalierVorgabe)+nDrehmomentErhoehung, 
-				nRatedCurrentMotor:= 	nNennleistungMotor, 
-				nTorqueConstant:= 		nDrehmomentKonstante, 
-				nTorqueLimitation=> 	nSollDrehmomentErrechnet);
-			
-			bDrehmomentErhoehen := TRUE;
-				
-		ELSIF
-			NOT bDrehwinkelOkMem
-			AND ABS(nDrehwinkelMem) >nMaxDrehwinkelNachTiefeOk_F1
-		THEN
-			(* Wenn Drehwinkel Überschritten-> Direkt Anhalten *)
-			nStep := 70;	(* -> Motor stoppen *)
-			nFehlerSchrittMerker := -1261;	(* Fehlercode merken Drehwinkel Überschritten Fall 1*)			
-		END_IF
-		
-(*================================================================================================================*)
-	62: (* === Drehwinkelprüfung&  Drehmoment Prüfung === *)
-		sStep := 'Schraubfall 2 Starten- Moment nioht Ok Tiefe Ok';
-		
-		(* Watchdog für Schraubvorgang *)
-		tonTimeOver1(
-			IN := TRUE, 
-			PT := I_stParam.tParam_ZeitdSchraubTakt);
-							
-		Q_nTorque := LREAL_TO_INT(nSollDrehmomentErrechnet);	(* Drehmoment wieder Setzen damit der Motor Weiter drehen kann *)
-		
-		(* Aufruf Drehmoment Prüfen *)
-		m_DrehmomentPruefung(
-			nDrehmomentSoll:= 		I_stParam.fParam_Sollmoment, 
-			bDrehmomentOk=> 		bDrehmomOkMem);
-			
-		(* Aufruf Drehwinkel Prüfen *)
-		m_DrehwinkelPruefung(
-			nPosAct:= 			NC_Axis_IN_nActPos, 
-			nPosMem:= 			nAuswertungPosMem, 
-			nPosSoll:= 			nSollDrehwinkelNachTiefeOK, 
-			nMaxDrehwinkel :=	nMaxDrehwinkelNachTiefeOk_F2,
-			bWinkelOk=> 		bDrehwinkelOkMem,
-			nWinkelAct=>		nDrehwinkelMem);
-		
-		(* Aufruf Drehwinkel Prüfen *)
-		m_TiefenPruefung(
-			nSolltiefeMin:= 	nMinimalSchraubtiefe, 
-			nSolltiefeMax:= 	I_stParam.fParam_Sollschraubtiefe, 
-			nToleranz:= 		0,	 
-			nActTiefe:= 		fSchraubTiefeIst, 
-			bTiefeOk=> 			bTiefeOkMem);
-			
-		(* Prozessdaten Drehwinkel Schreiben *)
-		IF nDrehwinkelMem> nPD_Drehwinkel
-		THEN
-			nPD_Drehwinkel :=	nDrehwinkelMem;
-		END_IF
-		
-		(* Prozessdaten Tiefe Schreiben *)
-		IF fSchraubTiefeIst < nPD_Tiefe
-		THEN
-			nPD_Tiefe:=	fSchraubTiefeIst;
-		END_IF
-		
-		(* Prozessdaten Drehmoment Schreiben *)
-		IF fDrehmomentIstMittel >nPD_Drehmoment
-		THEN
-			nPD_Drehmoment :=	fDrehmomentIstMittel;
-		END_IF
-		
-		IF 	bDrehwinkelOkMem
-			AND bDrehmomOkMem
-			AND bTiefeOkMem
-		THEN 
-			Q_nTorque := 0;
-			nStep := 70;
-		ELSIF
-			tonTimeOver1.Q
-		THEN
-			IF NOT bTiefeOkMem
-			THEN
-				nStep := 70;	(* -> Motor stoppen *)
-				nFehlerSchrittMerker := -1062;	(* Fehlercode merken Timeout Tiefe nicht OK Fall 2*)		
-			ELSE
-				IF NOT bDrehmomOkMem
-				THEN
-					nStep := 70;	(* -> Motor stoppen *)
-					nFehlerSchrittMerker := -1162;	(* Fehlercode merken Timeout Drehmoment nicht OK Fall 2*)	
-				ELSE
-					nFehlerSchrittMerker := -62;	(* Fehlercode merken Timeout Fall 2*)		
-				END_IF
-			END_IF
-		ELSIF
-			NOT bDrehwinkelOkMem
-			AND ABS(nDrehwinkelMem) >nMaxDrehwinkelNachTiefeOk_F2
-			
-		THEN
-			(* Wenn Drehwinkel Überschritten-> Direkt Anhalten *)
-			nStep := 70;	(* -> Motor stoppen *)
-			nFehlerSchrittMerker := -1262;	(* Fehlercode merken Drehwinkel Überschritten Fall 2*)			
-		END_IF
-		
-(*================================================================================================================*)
+
 	70: (* === MOTOR STOPPEN === *)
 		sStep := 'Motor_Stoppen';
 		Q_nTorque := 0;
@@ -1465,7 +1510,7 @@ THEN
 		END_IF
 (*================================================================================================================*)
 	100: (* === VORGANG ERFOLGREICH BEENDET === *)
-		sStep := 'Vorgang_Beendet';
+		sStep := CONCAT('Vorgang_OK_Schraubfall: ',INT_TO_STRING(nSchraubFallMerker));
 		
 		// Warten auf Freigabe für nächsten Zyklus
 		IF NOT I_bTaktStart 
@@ -1709,9 +1754,10 @@ THEN
 			bSchrAuswurfStart := TRUE;
 			nStep := 100;	(* -> Beenden *)
 		END_IF
-		
 (*================================================================================================================*)
-	-61: (* === FEHLER: SOLLTIEFE ÜBERSCHRITTEN === *)
+(* === FEHLER: Schraubfall 1  === *)		
+(*================================================================================================================*)
+	-61: 
 		sStep := 'FEHLER_Schraubfall_1_Timeout';
 		Q_nErrorId := -61;
 		
@@ -1723,7 +1769,7 @@ THEN
 			nStep := 100;	(* -> Beenden *)
 		END_IF
 (*================================================================================================================*)
-	-1261: (* === FEHLER: Schraubfall 1  === *)
+	-1261: 
 		sStep := 'FEHLER_Schraubfall_1_Drehwinkel_Überschritten';
 		Q_nErrorId := -1261;
 		
@@ -1736,7 +1782,7 @@ THEN
 		END_IF		
 		
 (*================================================================================================================*)
-	-62: (* === FEHLER: SOLLTIEFE ÜBERSCHRITTEN === *)
+	-62: 
 		sStep := 'FEHLER_Schraubfall_2_Timeout';
 		Q_nErrorId := -62;
 		
@@ -1747,33 +1793,10 @@ THEN
 			bSchrAuswurfStart := TRUE;
 			nStep := 100;	(* -> Beenden *)
 		END_IF
-		
 (*================================================================================================================*)
-	-1061: (* === FEHLER: SOLLTIEFE ÜBERSCHRITTEN === *)
-		sStep := 'FEHLER_Schraubfall_1_Tiefenänderung_Drehwinkel';
-		Q_nErrorId := -1061;
-		
-		IF I_bQuittFehler 
-			AND I_bGrdstlgSchrEinh 
-		THEN
-			bAutoquitAktiv := tonAutoquit.Q;
-			bSchrAuswurfStart := TRUE;
-			nStep := 100;	(* -> Beenden *)
-		END_IF
+(* === FEHLER: Schraubfall 2  === *)		
 (*================================================================================================================*)
-	-1062: (* === FEHLER: Schraubfall 2  === *)
-		sStep := 'FEHLER_Schraubfall_2_Timeout_Tiefe_nicht_ok';
-		Q_nErrorId := -1062;
-		
-		IF I_bQuittFehler 
-			AND I_bGrdstlgSchrEinh 
-		THEN
-			bAutoquitAktiv := tonAutoquit.Q;
-			bSchrAuswurfStart := TRUE;
-			nStep := 100;	(* -> Beenden *)
-		END_IF
-(*================================================================================================================*)
-	-1162: (* === FEHLER: Schraubfall 2  === *)
+	-1162: 
 		sStep := 'FEHLER_Schraubfall_2_Timeout_Drehmoment_nicht_ok';
 		Q_nErrorId := -1062;
 		
@@ -1785,7 +1808,7 @@ THEN
 			nStep := 100;	(* -> Beenden *)
 		END_IF		
 (*================================================================================================================*)
-	-1262: (* === FEHLER: Schraubfall 2  === *)
+	-1262: 
 		sStep := 'FEHLER_Schraubfall_2_Drehwinkel_Überschritten';
 		Q_nErrorId := -1262;
 		
@@ -1795,11 +1818,12 @@ THEN
 			bAutoquitAktiv := tonAutoquit.Q;
 			bSchrAuswurfStart := TRUE;
 			nStep := 100;	(* -> Beenden *)
-		END_IF		
-		
+		END_IF	
+(*================================================================================================================*)	
+(* === FEHLER: Schraubfall 3  === *)
 (*================================================================================================================*)
-	-63: (* === FEHLER: SOLLTIEFE ÜBERSCHRITTEN === *)
-		sStep := 'FEHLER_DrehomomentNichtOk_DrehwinkelNichtOk';
+	-63: 
+		sStep := 'FEHLER_Schraubfall_3_Timeout';
 		Q_nErrorId := -63;
 		
 		IF I_bQuittFehler 
@@ -1809,6 +1833,19 @@ THEN
 			bSchrAuswurfStart := TRUE;
 			nStep := 100;	(* -> Beenden *)
 		END_IF
+(*================================================================================================================*)
+	-1263: 
+		sStep := 'FEHLER_Schraubfall_3_Drehwinkel_Überschritten';
+		Q_nErrorId := -1263;
+		
+		IF I_bQuittFehler 
+			AND I_bGrdstlgSchrEinh 
+		THEN
+			bAutoquitAktiv := tonAutoquit.Q;
+			bSchrAuswurfStart := TRUE;
+			nStep := 100;	(* -> Beenden *)
+		END_IF		
+
 (*================================================================================================================*)
 	-65: (* === FEHLER: SOLLDREHMOMENT NICHT ERREICHT === *)
 		sStep := 'FEHLER_Solldrehmoment_nicht_erreicht';
@@ -1852,36 +1889,59 @@ ELSE
 	nStep := 0;
 END_IF
 
-// ================================================================================
-// ALLGEMEINE FUNKTIONEN UND ÜBERWACHUNG
-// ================================================================================
+(*========================================================*)
+(* Prozessdaten Merker schreiben *)
+(*========================================================*)
+IF (nStep >= 55)
+	AND (nStep <= 63)
+THEN
+	(* Prozessdaten Drehwinkel Schreiben *)
+	IF nDrehwinkelMem> nPD_Drehwinkel
+	THEN
+		nPD_Drehwinkel :=	nDrehwinkelMem;
+	END_IF
+	(* Prozessdaten Tiefe Schreiben *)
+	IF fSchraubTiefeIst < nPD_Tiefe
+	THEN
+		nPD_Tiefe:=	fSchraubTiefeIst;
+	END_IF
+	(* Prozessdaten Drehmoment Schreiben *)
+	IF fDrehmomentIstMittel >nPD_Drehmoment
+	THEN
+		nPD_Drehmoment :=	fDrehmomentIstMittel;
+	END_IF
+END_IF
 
-// === GRUNDSTELLUNG ERZWINGEN ===
+(*================================================================================*)
+(*ALLGEMEINE FUNKTIONEN UND ÜBERWACHUNG*)
+(*================================================================================*)
+
+(* === GRUNDSTELLUNG ERZWINGEN ===*)
 IF I_bGrundstellung 
 THEN
 	nStep := 0;
 END_IF
 
-// === AUTOMATISCHE QUITTIERUNG ===
+(* === AUTOMATISCHE QUITTIERUNG === *)
 tonAutoquit(
 	IN := (Q_bError 
 			AND I_tAutoQuit > T#0MS), 
 	PT := I_tAutoQuit);
 
-// === POSITIONSZUSTANDS-STRING ===
+(* === POSITIONSZUSTANDS-STRING === *)
 Q_sPosZustand := F_PosZustand(
 	I_sString := I_sPosBeschreibung, 
 	I_nStep := nStep, 
 	I_sStep := sStep);
 
-// === IST-SCHRAUBTIEFE AKTUALISIEREN ===
+(* === IST-SCHRAUBTIEFE AKTUALISIEREN === *)
 fSchraubTiefeIst := arrNcAchsen[I_nEncId].fPosIstwert;
 
-// === TIMER FÜR SCHRITTÜBERWACHUNG ===
+(* === TIMER FÜR SCHRITTÜBERWACHUNG === *)
 tonDelay1(IN := nStep = nOldStep, PT := T#1D);
 nOldStep := nStep;
 
-// === STEP-HISTORIE ===
+(* === STEP-HISTORIE === *)
 fbStepHistory(I_nStep := nStep);]]></ST>
       </Implementation>
     </Method>
@@ -2025,6 +2085,22 @@ END_IF]]></ST>
       <LineId Id="9" Count="0" />
       <LineId Id="477" Count="0" />
       <LineId Id="475" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Schrauber_PnP_3.ac_Schraubfall1">
+      <LineId Id="63" Count="0" />
+      <LineId Id="3" Count="59" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Schrauber_PnP_3.ac_Schraubfall2">
+      <LineId Id="2" Count="0" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="3" Count="44" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Schrauber_PnP_3.ac_Schraubfall3">
+      <LineId Id="67" Count="1" />
+      <LineId Id="2" Count="64" />
+      <LineId Id="1" Count="0" />
     </LineIds>
     <LineIds Name="FB_Schrauber_PnP_3.m_AchsKommunikation">
       <LineId Id="6" Count="21" />
@@ -2216,6 +2292,9 @@ END_IF]]></ST>
       <LineId Id="314" Count="5" />
       <LineId Id="873" Count="2" />
       <LineId Id="320" Count="0" />
+      <LineId Id="1746" Count="0" />
+      <LineId Id="1748" Count="5" />
+      <LineId Id="1747" Count="0" />
       <LineId Id="877" Count="0" />
       <LineId Id="1186" Count="0" />
       <LineId Id="878" Count="1" />
@@ -2228,12 +2307,6 @@ END_IF]]></ST>
       <LineId Id="1193" Count="2" />
       <LineId Id="1192" Count="0" />
       <LineId Id="1196" Count="0" />
-      <LineId Id="1043" Count="3" />
-      <LineId Id="1023" Count="0" />
-      <LineId Id="1202" Count="0" />
-      <LineId Id="1197" Count="3" />
-      <LineId Id="1107" Count="0" />
-      <LineId Id="1201" Count="0" />
       <LineId Id="1203" Count="0" />
       <LineId Id="1206" Count="0" />
       <LineId Id="1208" Count="1" />
@@ -2258,6 +2331,9 @@ END_IF]]></ST>
       <LineId Id="1227" Count="0" />
       <LineId Id="1226" Count="0" />
       <LineId Id="1225" Count="0" />
+      <LineId Id="1768" Count="0" />
+      <LineId Id="1763" Count="4" />
+      <LineId Id="1762" Count="0" />
       <LineId Id="1207" Count="0" />
       <LineId Id="1567" Count="1" />
       <LineId Id="1204" Count="0" />
@@ -2265,6 +2341,9 @@ END_IF]]></ST>
       <LineId Id="1588" Count="2" />
       <LineId Id="1587" Count="0" />
       <LineId Id="1591" Count="0" />
+      <LineId Id="1755" Count="5" />
+      <LineId Id="1754" Count="0" />
+      <LineId Id="1761" Count="0" />
       <LineId Id="1570" Count="0" />
       <LineId Id="1586" Count="0" />
       <LineId Id="1742" Count="0" />
@@ -2276,85 +2355,16 @@ END_IF]]></ST>
       <LineId Id="1613" Count="0" />
       <LineId Id="1596" Count="1" />
       <LineId Id="1576" Count="0" />
+      <LineId Id="1955" Count="0" />
       <LineId Id="1569" Count="0" />
-      <LineId Id="1242" Count="0" />
-      <LineId Id="1205" Count="0" />
-      <LineId Id="1243" Count="1" />
-      <LineId Id="1275" Count="2" />
-      <LineId Id="1274" Count="0" />
-      <LineId Id="1278" Count="0" />
-      <LineId Id="1639" Count="0" />
-      <LineId Id="1258" Count="0" />
-      <LineId Id="1246" Count="6" />
-      <LineId Id="1245" Count="0" />
-      <LineId Id="1256" Count="0" />
-      <LineId Id="1534" Count="5" />
-      <LineId Id="1533" Count="0" />
-      <LineId Id="1540" Count="0" />
-      <LineId Id="1615" Count="3" />
-      <LineId Id="1614" Count="0" />
-      <LineId Id="1619" Count="0" />
-      <LineId Id="1383" Count="9" />
-      <LineId Id="1382" Count="0" />
-      <LineId Id="1393" Count="0" />
-      <LineId Id="1267" Count="0" />
-      <LineId Id="1541" Count="0" />
-      <LineId Id="1268" Count="1" />
-      <LineId Id="1542" Count="0" />
-      <LineId Id="1279" Count="4" />
-      <LineId Id="1630" Count="2" />
-      <LineId Id="1634" Count="0" />
-      <LineId Id="1633" Count="0" />
-      <LineId Id="1745" Count="0" />
-      <LineId Id="1642" Count="5" />
-      <LineId Id="1641" Count="0" />
-      <LineId Id="1635" Count="0" />
-      <LineId Id="1649" Count="0" />
-      <LineId Id="1648" Count="0" />
-      <LineId Id="1543" Count="6" />
       <LineId Id="1257" Count="0" />
+      <LineId Id="1951" Count="0" />
       <LineId Id="1261" Count="0" />
-      <LineId Id="1289" Count="10" />
-      <LineId Id="1326" Count="2" />
-      <LineId Id="1325" Count="0" />
-      <LineId Id="1329" Count="0" />
-      <LineId Id="1300" Count="8" />
-      <LineId Id="1340" Count="0" />
-      <LineId Id="1334" Count="5" />
-      <LineId Id="1341" Count="0" />
-      <LineId Id="1621" Count="3" />
-      <LineId Id="1620" Count="0" />
-      <LineId Id="1625" Count="0" />
-      <LineId Id="1395" Count="9" />
-      <LineId Id="1394" Count="0" />
-      <LineId Id="1405" Count="0" />
-      <LineId Id="1309" Count="0" />
-      <LineId Id="1330" Count="0" />
-      <LineId Id="1436" Count="0" />
-      <LineId Id="1310" Count="0" />
-      <LineId Id="1350" Count="0" />
-      <LineId Id="1437" Count="0" />
-      <LineId Id="1319" Count="2" />
-      <LineId Id="1432" Count="0" />
-      <LineId Id="1504" Count="0" />
-      <LineId Id="1508" Count="0" />
-      <LineId Id="1506" Count="0" />
-      <LineId Id="1510" Count="1" />
-      <LineId Id="1513" Count="0" />
-      <LineId Id="1517" Count="0" />
-      <LineId Id="1515" Count="0" />
-      <LineId Id="1518" Count="1" />
-      <LineId Id="1514" Count="0" />
-      <LineId Id="1505" Count="0" />
-      <LineId Id="1496" Count="0" />
-      <LineId Id="1498" Count="1" />
-      <LineId Id="1563" Count="0" />
-      <LineId Id="1500" Count="0" />
-      <LineId Id="1503" Count="0" />
-      <LineId Id="1501" Count="1" />
-      <LineId Id="1288" Count="0" />
-      <LineId Id="1463" Count="0" />
-      <LineId Id="392" Count="3" />
+      <LineId Id="1953" Count="0" />
+      <LineId Id="1952" Count="0" />
+      <LineId Id="392" Count="0" />
+      <LineId Id="1954" Count="0" />
+      <LineId Id="393" Count="2" />
       <LineId Id="1047" Count="0" />
       <LineId Id="396" Count="1" />
       <LineId Id="928" Count="1" />
@@ -2383,8 +2393,10 @@ END_IF]]></ST>
       <LineId Id="804" Count="0" />
       <LineId Id="472" Count="4" />
       <LineId Id="805" Count="0" />
-      <LineId Id="477" Count="9" />
-      <LineId Id="489" Count="2" />
+      <LineId Id="477" Count="8" />
+      <LineId Id="489" Count="0" />
+      <LineId Id="1956" Count="0" />
+      <LineId Id="490" Count="1" />
       <LineId Id="806" Count="1" />
       <LineId Id="492" Count="1" />
       <LineId Id="495" Count="13" />
@@ -2453,6 +2465,7 @@ END_IF]]></ST>
       <LineId Id="1598" Count="0" />
       <LineId Id="1600" Count="10" />
       <LineId Id="1599" Count="0" />
+      <LineId Id="1881" Count="0" />
       <LineId Id="1612" Count="0" />
       <LineId Id="664" Count="5" />
       <LineId Id="832" Count="1" />
@@ -2462,26 +2475,33 @@ END_IF]]></ST>
       <LineId Id="1562" Count="0" />
       <LineId Id="1127" Count="10" />
       <LineId Id="1126" Count="0" />
-      <LineId Id="1355" Count="0" />
-      <LineId Id="1357" Count="13" />
-      <LineId Id="1520" Count="0" />
-      <LineId Id="1372" Count="7" />
-      <LineId Id="1356" Count="0" />
-      <LineId Id="1413" Count="10" />
+      <LineId Id="1882" Count="0" />
+      <LineId Id="1880" Count="0" />
+      <LineId Id="1369" Count="0" />
+      <LineId Id="1414" Count="9" />
       <LineId Id="1380" Count="0" />
       <LineId Id="1521" Count="10" />
       <LineId Id="1424" Count="0" />
+      <LineId Id="1883" Count="0" />
+      <LineId Id="1855" Count="23" />
       <LineId Id="1532" Count="0" />
-      <LineId Id="1354" Count="0" />
-      <LineId Id="1140" Count="9" />
-      <LineId Id="1138" Count="0" />
+      <LineId Id="1879" Count="0" />
       <LineId Id="674" Count="5" />
       <LineId Id="834" Count="1" />
       <LineId Id="680" Count="9" />
       <LineId Id="836" Count="1" />
       <LineId Id="690" Count="9" />
       <LineId Id="838" Count="0" />
-      <LineId Id="700" Count="17" />
+      <LineId Id="700" Count="10" />
+      <LineId Id="1913" Count="0" />
+      <LineId Id="1912" Count="0" />
+      <LineId Id="1885" Count="0" />
+      <LineId Id="1914" Count="2" />
+      <LineId Id="1918" Count="0" />
+      <LineId Id="1920" Count="13" />
+      <LineId Id="1919" Count="0" />
+      <LineId Id="1917" Count="0" />
+      <LineId Id="711" Count="6" />
       <LineId Id="839" Count="0" />
       <LineId Id="718" Count="5" />
       <LineId Id="840" Count="0" />
