@@ -328,11 +328,12 @@ m_Ausgangszuweisung();
 
 ]]></ST>
     </Implementation>
-    <Folder Name="Ablauf" Id="{7ec7416a-888f-448a-b3d6-95a028cf8f5b}" />
+    <Folder Name="Ablauf" Id="{7ec7416a-888f-448a-b3d6-95a028cf8f5b}">
+      <Folder Name="Schraubfall" Id="{51583300-f895-4190-bfb2-3128edad81ca}" />
+    </Folder>
     <Folder Name="Drehmoment" Id="{b3a04782-c8fe-4ebe-9e2e-e67aac725e76}" />
     <Folder Name="Pruefung" Id="{681ee314-02c3-45ca-bb71-f87ae2e041fa}" />
     <Folder Name="Rechner" Id="{b708b439-703c-4925-9772-14b56de2997f}" />
-    <Folder Name="Schraubfall" Id="{51583300-f895-4190-bfb2-3128edad81ca}" />
     <Folder Name="Sonstiges" Id="{abc78acd-afe6-440b-9dca-34d61673507f}" />
     <Action Name="ac_AblaufAuswurf" Id="{b72e9e54-cd27-41da-8e65-532eb52ea585}" FolderPath="Ablauf\">
       <Implementation>
@@ -523,6 +524,11 @@ CASE nStepLeerlauf OF
 0: (* === LeerlaufPrüfung/ Erkennung ob Motor Schwergängig ist === *)
 	sStepLeerlauf := 'Leerlaufpruefung';
 			
+	(* Watchdog Positionierfreigabe *)
+	tonTimeOver1(
+		IN := TRUE, 
+		PT := T#1000MS);
+		
 	(* Drehmoment Vorgabe errechnen *)
 	m_DrehmomentVorgabe(
 		nSkalierung :=			1,
@@ -541,6 +547,12 @@ CASE nStepLeerlauf OF
 		NC_Axis_OUT_PTPBuffMode := MC_Aborting;
 		NC_Axis_OUT_bAchsePosStarten := TRUE;	
 		nStepLeerlauf := 301;
+	ELSIF
+		tonTimeOver1.Q
+	THEN
+		tonTimeOver1(IN := FALSE);
+		nFehlerSchrittMerker := -300;
+		nStepLeerlauf := 999;
 	END_IF
 	
 (*================================================================================================================*)
@@ -1545,6 +1557,17 @@ THEN
 			bSchrAuswurfStart := TRUE;
 			nStep := 100;	(* -> Auswurf zurückfahren *)
 		END_IF
+(*================================================================================================================*)
+	-300: (* === FEHLER: Leerlaufprüfung === *)
+		sStep := 'FEHLER_Leerlaufprüfung keine Freigabe zum Positionieren';
+		Q_nErrorId := -300;
+		
+		IF I_bQuittFehler 
+		THEN
+			bAutoquitAktiv := tonAutoquit.Q;
+			bSchrAuswurfStart := TRUE;
+			nStep := 100;	(* -> Auswurf zurückfahren *)
+		END_IF
 	END_CASE
 	
 ELSE
@@ -1608,7 +1631,7 @@ nOldStep := nStep;
 fbStepHistory(I_nStep := nStep);]]></ST>
       </Implementation>
     </Action>
-    <Action Name="ac_Schraubfall1" Id="{dbecdb19-3742-44e5-b2f4-f647f98882b3}" FolderPath="Schraubfall\">
+    <Action Name="ac_Schraubfall1" Id="{dbecdb19-3742-44e5-b2f4-f647f98882b3}" FolderPath="Ablauf\Schraubfall\">
       <Implementation>
         <ST><![CDATA[(*================================================================================================================*)
 (* === Drehwinkelprüfung&  Drehmoment Prüfung === *)
@@ -1687,7 +1710,7 @@ THEN
 END_IF]]></ST>
       </Implementation>
     </Action>
-    <Action Name="ac_Schraubfall2" Id="{9b780de6-bebf-4f00-a106-069c03e6b06c}" FolderPath="Schraubfall\">
+    <Action Name="ac_Schraubfall2" Id="{9b780de6-bebf-4f00-a106-069c03e6b06c}" FolderPath="Ablauf\Schraubfall\">
       <Implementation>
         <ST><![CDATA[(*================================================================================================================*)
 (* === Drehwinkelprüfung&  Drehmoment Prüfung === *)
@@ -1750,7 +1773,7 @@ THEN
 END_IF]]></ST>
       </Implementation>
     </Action>
-    <Action Name="ac_Schraubfall3" Id="{efd50f45-50f2-4675-b11d-f586dd145b4b}" FolderPath="Schraubfall\">
+    <Action Name="ac_Schraubfall3" Id="{efd50f45-50f2-4675-b11d-f586dd145b4b}" FolderPath="Ablauf\Schraubfall\">
       <Implementation>
         <ST><![CDATA[(*================================================================================================================*)
 (* === Drehwinkelprüfung&  Drehmoment Prüfung === *)
@@ -2535,7 +2558,15 @@ END_IF]]></ST>
       <LineId Id="5" Count="1" />
       <LineId Id="4" Count="0" />
       <LineId Id="1" Count="0" />
-      <LineId Id="7" Count="45" />
+      <LineId Id="7" Count="2" />
+      <LineId Id="57" Count="2" />
+      <LineId Id="56" Count="0" />
+      <LineId Id="60" Count="0" />
+      <LineId Id="10" Count="17" />
+      <LineId Id="62" Count="2" />
+      <LineId Id="66" Count="1" />
+      <LineId Id="65" Count="0" />
+      <LineId Id="28" Count="24" />
       <LineId Id="2" Count="0" />
       <LineId Id="54" Count="0" />
       <LineId Id="53" Count="0" />
@@ -2669,6 +2700,8 @@ END_IF]]></ST>
       <LineId Id="1066" Count="11" />
       <LineId Id="1390" Count="0" />
       <LineId Id="1078" Count="22" />
+      <LineId Id="1416" Count="9" />
+      <LineId Id="1415" Count="0" />
       <LineId Id="1102" Count="59" />
       <LineId Id="1" Count="0" />
     </LineIds>
