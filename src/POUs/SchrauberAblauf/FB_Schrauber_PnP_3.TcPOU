@@ -26,6 +26,7 @@ Vollautomatischer Servoschrauber für Schienen- und Einzelschrauben
 (*22/09/2025   	| 1.04      		| TC3		  		| N.Kersting      	| Leerlaufprüfung implementiert *)
 (*23/09/2025   	| 1.05      		| TC3		  		| N.Kersting      	| Neue Berechnete Drehwinkelvorgabe für Schraubfall 1 *)
 (*23/09/2025   	| 2.00      		| TC3		  		| N.Kersting      	| Komplette Neustrukturierung des Ablaufs mit unteraktionen für die unterschiedlichen sequenzen*)
+(*23/09/2025   	| 2.01      		| TC3		  		| N.Kersting      	| Bugfixe Step 200 und 300*)
 (*====================================================================================================================================================*)
 VAR_INPUT
 	(* === STEUERUNGSEINGÄNGE === *)
@@ -1300,6 +1301,8 @@ THEN
 	(* ================================================================================ *)
 	200: sStep :=	sStepAuswurf;
 		
+		ac_AblaufAuswurf();
+		
 		IF nStepAuswurf = 999
 		THEN
 			nStepAuswurf :=0;
@@ -1317,6 +1320,8 @@ THEN
 	(* ================================================================================ *)
 	300: sStep := sStepLeerlauf;
 				
+		ac_AblaufLeerlaufPruef();
+		
 		IF nStepLeerlauf = 999
 		THEN
 			nStepLeerlauf :=0;
@@ -2624,7 +2629,9 @@ END_IF]]></ST>
       <LineId Id="1379" Count="0" />
       <LineId Id="680" Count="3" />
       <LineId Id="845" Count="0" />
-      <LineId Id="1343" Count="2" />
+      <LineId Id="1343" Count="0" />
+      <LineId Id="1411" Count="1" />
+      <LineId Id="1344" Count="1" />
       <LineId Id="1355" Count="0" />
       <LineId Id="1347" Count="2" />
       <LineId Id="1351" Count="0" />
@@ -2637,6 +2644,7 @@ END_IF]]></ST>
       <LineId Id="1361" Count="0" />
       <LineId Id="847" Count="0" />
       <LineId Id="849" Count="0" />
+      <LineId Id="1413" Count="1" />
       <LineId Id="1364" Count="3" />
       <LineId Id="893" Count="17" />
       <LineId Id="1380" Count="0" />
