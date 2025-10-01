@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <DUT Name="ST_SchrauberAblauf_ProzessDaten" Id="{f541fbd6-c2c7-484a-a8a7-96bdaab1ab44}">
+    <Declaration><![CDATA[TYPE ST_SchrauberAblauf_ProzessDaten :
+STRUCT
+	(*========================================================================================================================*)
+	(* === Prozesswerte für Analyse === *)
+	(*========================================================================================================================*)
+	nPD_Tiefe						: LREAL;			(* Prozessdaten - erreichte Tiefe *)
+	nPD_Drehmoment					: LREAL;			(* Prozessdaten - erreichtes Drehmoment *)
+	nPD_Drehwinkel					: LREAL;			(* Prozessdaten - erreichter Drehwinkel *)
+	tPD_Schraubtakt_Komplett		: TIME;				(* Prozessdaten - Zeit für den Kompletten Schraubprozess *)
+	tPD_Schraubtakt_Schrauben		: TIME;				(* Prozessdaten - Zeit nur für den Schraubvorgang ohne Zylinder bewegungen etc. *)
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>
