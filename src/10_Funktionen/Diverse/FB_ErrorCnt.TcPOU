@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_ErrorCnt" Id="{3a9f1f33-9277-41d4-8480-7dfbfdc8bc62}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ErrorCnt
+VAR_INPUT
+	I_bAktiv	:BOOL;
+	I_bReset	:BOOL;
+END_VAR
+VAR_OUTPUT
+	Q_nCnt	:DINT;
+END_VAR
+VAR
+	rtrig	:R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+	rtrig(CLK:=I_bAktiv);
+	IF rtrig.Q THEN
+		Q_nCnt := Q_nCnt + 1;
+	ELSIF I_bReset THEN
+		Q_nCnt := 0;
+	END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_ErrorCnt">
+      <LineId Id="11" Count="6" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="fb_Intervall" Id="{3d9a6f7a-2fa8-412e-9b47-e41561194e48}" SpecialFunc="None">
+    <Declaration><![CDATA[(*======================================================================================================================================*)
+(* 	fb_Intervall:	 Neuer ganz einfacher Taktgeber, mit nur einer Zeit, ON und Off = I_tTime.
+				Sollte der Taktgeber mehr vielfalt benötigen, gibt es den fb_IntervallAdvance
+	
+	ACHTUNG:	Der Timer verwendet die Zykluszeit der Laufzeit 1 um eine genaue Zeitberechnung zu nutzen, deshalb sollte dieser Baustein nur in dieser 
+				Laufzeit verwendet werden! 
+				Ebenfalls wichtig ist, dass die Variable I_tTime mindestens 2x so groß ist, wie die cycleTime der Laufzeit 1 
+				sonst wird der Ausgang dauerhaft True gesetzt.	   *)
+(*
+Date          	| Version    	| created under        	| Author          	| Remark *)
+(*======================================================================================================================================*)
+(*22/03/2024  	| 1.00      		| TC2		  		| N.Kersting       | first release *)
+(*22/03/2024  	| 1.01      		| TC2		  		| N.Kersting       | Zykluszeit wird nun beachtet siehe infobox *)
+(*======================================================================================================================================*)
+FUNCTION_BLOCK fb_Intervall
+VAR_INPUT
+	I_bIn		: BOOL;
+	I_tTime		:TIME := t#1s;
+END_VAR
+VAR_OUTPUT
+	Q			: BOOL;
+END_VAR
+VAR
+	tTimer		: TON;
+	bGueltig		: BOOL;
+	iStep		: INT;
+	tTime		:TIME;
+	tZyklTime	:TIME;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*IF SystemTaskInfoArr[1].cycleTime>0
+THEN
+	tZyklTime :=	UDINT_TO_TIME(SystemTaskInfoArr[1].cycleTime/10000);
+END_IF
+
+IF tZyklTime	> t#0ms
+THEN
+	IF	I_tTime	 <	(tZyklTime*2)
+	THEN
+		bGueltig	:= 	FALSE;
+	ELSE
+		bGueltig	:= 	TRUE;
+		tTime	:=	I_tTime	- (tZyklTime*2);
+	END_IF
+ELSE
+	bGueltig	:= 	FALSE;
+END_IF*)
+
+bGueltig := TRUE;
+tZyklTime := T#4MS;
+
+tTime	:=	I_tTime	- (tZyklTime*2);
+
+IF I_bIn
+	AND bGueltig
+THEN
+	tTimer();
+	tTimer.PT	:=	tTime;
+
+	CASE iStep OF
+	0:	Q 				:= 	FALSE;
+		tTimer.IN			:=	TRUE;
+
+		IF  tTimer.Q
+		THEN
+			tTimer.IN		:=	FALSE;
+			iStep		:= 	iStep+1;
+		END_IF
+
+	1:	Q 				:= 	TRUE;
+		tTimer.IN			:=	TRUE;
+
+		IF  tTimer.Q
+		THEN
+			tTimer.IN		:=	FALSE;
+			iStep		:= 	0;
+		END_IF
+	END_CASE
+ELSE
+	tTimer.IN				:=	FALSE;
+	iStep
+			:= 	0;
+	IF NOT bGueltig
+	THEN
+		Q 				:= 	TRUE;
+	ELSE
+		Q 				:= 	FALSE;
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="fb_Intervall">
+      <LineId Id="29" Count="2" />
+      <LineId Id="33" Count="0" />
+      <LineId Id="112" Count="0" />
+      <LineId Id="34" Count="11" />
+      <LineId Id="117" Count="0" />
+      <LineId Id="115" Count="0" />
+      <LineId Id="113" Count="0" />
+      <LineId Id="116" Count="0" />
+      <LineId Id="46" Count="0" />
+      <LineId Id="114" Count="0" />
+      <LineId Id="47" Count="35" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

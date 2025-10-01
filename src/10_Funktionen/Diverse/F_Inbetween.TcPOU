@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="F_Inbetween" Id="{1d6109fd-f292-405e-a375-ab9d5cd167df}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_Inbetween : BOOL
+VAR_INPUT
+	I_fActualValue		:	LREAL;
+	I_fMinimalValue	:	LREAL;
+	I_fMaximalValue	:	LREAL;
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	IF I_fActualValue
+		>= I_fMinimalValue
+		AND I_fActualValue
+		<= I_fMaximalValue
+	THEN
+		F_Inbetween := TRUE;
+	ELSE
+		F_Inbetween := FALSE;
+	END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_Inbetween">
+      <LineId Id="3" Count="7" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

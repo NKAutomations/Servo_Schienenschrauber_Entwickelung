@@ -1,0 +1,273 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="fb_RGB_Button_Box" Id="{0b30a6a9-6753-47ea-a06b-915cc3d4a9f8}" SpecialFunc="None">
+    <Declaration><![CDATA[(*======================================================================================================================================*)
+(* fb_RGB_Button_Box: Zur Ansteuerung einer Box mit Mehreren RGB Tastern RGB Tasters  *)
+(*
+Date          	| Version    	| created under        	| Author          	| Remark *)
+(*======================================================================================================================================*)
+(*20/03/2024	| 1.00      		| TC2		  		| N.Kersting       | first release *)
+(*26/07/2024	| 1.01      		| TC2		  		| N.Kersting       | Lauflicht / Demo Mode hinzugefügt (Achtung Strukturen wurden erweitert *)
+(*======================================================================================================================================*)
+FUNCTION_BLOCK fb_RGB_Button_Box
+VAR_INPUT
+	I_bRGB_Test			:BOOL;
+	I_bDemoMode		:BOOL;
+	I_stButtonCfg			:ARRAY[1..10] OF st_ButtonBox_Inputs;
+
+END_VAR
+VAR_OUTPUT
+	Q_stButtons			:ARRAY[1..10] OF st_ButtonBox_Outputs;
+END_VAR
+VAR
+	i,h :INT;
+	fbButtonsCfg			:ARRAY[1..10] OF fb_RGB_Button;
+
+	(* Demo *)
+	DemoColorSelect		:enumRGB_Button_Color;
+	DemoRGBtest		:BOOL;
+	DemoColors			:ARRAY[1..10] OF enumRGB_Button_Color;
+	iStepLauflicht			:INT;
+	iStepColor			:INT;
+	fbIntervall1s			:fb_Intervall;
+	trig_NextStep			:R_TRIG;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*	*)
+ac_Output();
+
+
+(* Beispiel *)
+
+(*
+	fbButtonBox.I_stButtonCfg[1].bInput	:=	FALSE;
+	fbButtonBox.I_stButtonCfg[1].bQuery1	:=	FALSE;
+	fbButtonBox.I_stButtonCfg[1].bQuery2	:=	FALSE;
+
+	fbButtonBox.I_stButtonCfg[1].stColors.Input_Color		:=	Green;
+	fbButtonBox.I_stButtonCfg[1].stColors.Query1_Color		:=	Red;
+	fbButtonBox.I_stButtonCfg[1].stColors.Query2_Color		:=	Blue;
+	fbButtonBox.I_stButtonCfg[1].stColors.Query12_Color	:=	White;*)]]></ST>
+    </Implementation>
+    <Action Name="ac_DemoAblauf" Id="{f58f994b-4ebc-4770-b71e-6569966d6ef5}">
+      <Implementation>
+        <ST><![CDATA[CASE iStepLauflicht OF
+
+0:	(* Alle Ausschalten *)
+
+	FOR h := 1 TO 10 BY 1 DO
+			DemoColors[h]	:= off;
+	END_FOR
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+
+1:	DemoColors[iStepLauflicht]	:= 	DemoColorSelect;
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+
+2:	DemoColors[iStepLauflicht]	:= 	DemoColorSelect;
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+
+3:	DemoColors[iStepLauflicht]	:= 	DemoColorSelect;
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+
+4:	DemoColors[iStepLauflicht]	:= 	DemoColorSelect;
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+
+5:	DemoColors[iStepLauflicht]	:= 	DemoColorSelect;
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+
+6:	DemoColors[iStepLauflicht]	:= 	DemoColorSelect;
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+7:	DemoColors[iStepLauflicht]	:= 	DemoColorSelect;
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+
+8:	DemoColors[iStepLauflicht]	:= 	DemoColorSelect;
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+
+9:	DemoColors[iStepLauflicht]	:= 	DemoColorSelect;
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+
+10:	DemoColors[iStepLauflicht]	:= 	DemoColorSelect;
+
+	IF	trig_NextStep.Q
+	THEN
+		iStepLauflicht := iStepLauflicht +1;
+	END_IF
+
+11:	(* INIT*)
+	;
+END_CASE]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ac_Lauflicht" Id="{4987c32c-a69a-4b50-9125-ee7afd028ee7}">
+      <Implementation>
+        <ST><![CDATA[fbIntervall1s(I_bIn:= TRUE , I_tTime:= , Q=> );
+trig_NextStep(CLK:=fbIntervall1s.Q , Q=> );
+
+(*	Off,
+	White,
+	(*	Grundfarben *)
+	Red,
+	Green,
+	Blue,
+	(*	Mischfarben *)
+	Pink,
+	Yellow,
+	Cyan);*)
+
+CASE iStepColor	OF
+
+0:	DemoRGBtest	:= FALSE;
+	DemoColorSelect := White;
+	ac_DemoAblauf();
+
+	IF (iStepLauflicht	= 11)
+	THEN
+		iStepLauflicht := 0;
+		iStepColor := iStepColor +1;
+	END_IF
+
+1:	ac_DemoAblauf();
+	DemoColorSelect := Red;
+
+	IF (iStepLauflicht	= 11)
+	THEN
+		iStepLauflicht := 0;
+		iStepColor := iStepColor +1;
+	END_IF
+
+2:	ac_DemoAblauf();
+	DemoColorSelect := Cyan;
+
+	IF (iStepLauflicht	= 11)
+	THEN
+		iStepLauflicht := 0;
+		iStepColor := iStepColor +1;
+	END_IF
+
+3: 	ac_DemoAblauf();
+	DemoColorSelect := Green;
+
+	IF (iStepLauflicht	= 11)
+	THEN
+		iStepLauflicht := 0;
+		iStepColor := iStepColor +2;
+	END_IF
+
+4:	DemoRGBtest	:= TRUE;
+	ac_DemoAblauf();
+
+	IF (iStepLauflicht	= 11)
+	THEN
+		iStepLauflicht := 0;
+		iStepColor := 0;
+	END_IF
+
+5:	iStepLauflicht := 0;
+	iStepColor := 0;
+END_CASE]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ac_Output" Id="{75bf2535-6670-48d7-b80b-66a720983b39}">
+      <Implementation>
+        <ST><![CDATA[FOR i := 1 TO 10 BY 1 DO
+
+	IF I_bDemoMode
+	THEN
+		ac_Lauflicht();
+
+		fbButtonsCfg[i].I_stColors.Demo	:=DemoColors[i];
+
+		fbButtonsCfg[i](
+			I_bDemo:=		I_bDemoMode,
+			I_bRGBTest:= 	DemoRGBtest,
+			I_bInput:= 		FALSE,
+			I_bQuery1:= 		FALSE,
+			I_bQuery2:=		FALSE ,
+			Q_bLED_Red=> 	Q_stButtons[i].Red,
+			Q_bLED_Green=> Q_stButtons[i].Green,
+			Q_bLED_Blue=>	Q_stButtons[i].Blue,
+			Q_dwColor=>		Q_stButtons[i].Color,
+			Q_Out =>			Q_stButtons[i].Q );
+	
+			Q_stButtons[i].Name	:=	I_stButtonCfg[i].sName;
+	ELSE
+
+		iStepLauflicht := 0;
+		iStepColor := 0;
+
+		fbButtonsCfg[i](
+			I_bDemo:=		FALSE,
+			I_bRGBTest:= 	I_bRGB_Test,
+			I_bInput:= 		I_stButtonCfg[i].bInput,
+			I_bQuery1:= 		I_stButtonCfg[i].bQuery1,
+			I_bQuery2:=		I_stButtonCfg[i].bQuery2 ,
+			I_stColors:= 		I_stButtonCfg[i].stColors,
+			Q_bLED_Red=> 	Q_stButtons[i].Red,
+			Q_bLED_Green=> Q_stButtons[i].Green,
+			Q_bLED_Blue=>	Q_stButtons[i].Blue,
+			Q_dwColor=>		Q_stButtons[i].Color,
+			Q_Out =>			Q_stButtons[i].Q );
+	
+			Q_stButtons[i].Name	:=	I_stButtonCfg[i].sName;
+	END_IF
+
+END_FOR]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="fb_RGB_Button_Box">
+      <LineId Id="32" Count="14" />
+    </LineIds>
+    <LineIds Name="fb_RGB_Button_Box.ac_DemoAblauf">
+      <LineId Id="0" Count="84" />
+    </LineIds>
+    <LineIds Name="fb_RGB_Button_Box.ac_Lauflicht">
+      <LineId Id="0" Count="42" />
+      <LineId Id="66" Count="0" />
+      <LineId Id="44" Count="20" />
+    </LineIds>
+    <LineIds Name="fb_RGB_Button_Box.ac_Output">
+      <LineId Id="0" Count="42" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

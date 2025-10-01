@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_Mittelwert" Id="{b480545a-5bf4-4769-a3cc-31b6ca9419c3}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Mittelwert
+VAR_INPUT
+	I_fAktlWert	: LREAL;
+	I_nAnzWerte	: INT	:= 1;
+	I_bReset		: BOOL;
+END_VAR
+VAR
+	arrWerte		: ARRAY[0..50] OF LREAL;
+	fGesamtWert	: LREAL;
+	idx			: INT;
+END_VAR
+
+VAR_OUTPUT
+	Q_fMittelwert	: LREAL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	(*************************************************************************************)
+	(* Mittelwert des Drehmoments bilden, damit nicht ein kurzer Ausschlag gleich zuer Abschaltung führen könnte *)
+	IF I_bReset
+	THEN
+		FOR idx:= 1 TO 50 DO
+			arrWerte[idx]	:= 0;
+		END_FOR
+	END_IF
+
+	arrWerte[0]	:= I_fAktlWert;
+
+	fGesamtWert	:= 0;
+
+	(***)
+	FOR idx:= I_nAnzWerte TO 1 BY -1 DO
+		arrWerte[idx]	:= arrWerte[idx-1];
+	END_FOR
+
+	(***)
+	FOR idx:= 0 TO I_nAnzWerte-1 DO
+		fGesamtWert		:=
+			fGesamtWert
+			+ arrWerte[idx];
+	END_FOR
+
+	(***)
+	Q_fMittelwert:=
+		fGesamtWert
+		/I_nAnzWerte;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Mittelwert">
+      <LineId Id="3" Count="27" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

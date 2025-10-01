@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="MAIN" Id="{2cd6c072-ca5e-4bc3-9fe1-6217351787c7}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+fbButtonBox	:fb_RGB_Button_Box;
+i:INT;
+stColor	:stFarbe;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[PRG_Schrauber();
+
+fbButtonBox(
+	I_bRGB_Test:= , 
+	I_bDemoMode:= , 
+	I_stButtonCfg:= , 
+	Q_stButtons=> );
+	
+FOR i := 1 TO 10 BY 1 DO
+	fbButtonBox.I_stButtonCfg[i].stColors.Input_Color :=	1;
+	fbButtonBox.I_stButtonCfg[i].stColors.Query1_Color :=	3;
+	fbButtonBox.I_stButtonCfg[i].stColors.Query12_Color :=	5;
+	fbButtonBox.I_stButtonCfg[i].stColors.Query2_Color :=	2;
+	
+	fbButtonBox.I_stButtonCfg[i].bInput :=bButtonBoxInput[i];
+	bButtonBoxColorRed[i] := fbButtonBox.Q_stButtons[i].Red;
+	bButtonBoxColorBlue[i] := fbButtonBox.Q_stButtons[i].Blue;
+	bButtonBoxColorGreen[i] := fbButtonBox.Q_stButtons[i].Green;
+END_FOR
+
+fbButtonBox.I_stButtonCfg[1].bQuery1 :=	PRG_Schrauber.iAuswSchrauberMode <> 0 
+										AND PRG_Schrauber.iAuswSchrauberMode <> 5 
+										AND PRG_Schrauber.iAuswSchrauberMode <> 6;
+
+fbButtonBox.I_stButtonCfg[1].bQuery2 :=	PRG_Schrauber.bTaktStartMerker;
+
+fbButtonBox.I_stButtonCfg[2].bQuery1 :=	PRG_Schrauber.iAuswSchrauberMode = 0;
+fbButtonBox.I_stButtonCfg[6].bQuery1 :=	PRG_Schrauber.iAuswSchrauberMode = 1;
+fbButtonBox.I_stButtonCfg[7].bQuery1 :=	PRG_Schrauber.iAuswSchrauberMode = 4;
+fbButtonBox.I_stButtonCfg[8].bQuery1 :=	PRG_Schrauber.iAuswSchrauberMode = 5;
+fbButtonBox.I_stButtonCfg[9].bQuery1 :=	PRG_Schrauber.iAuswSchrauberMode = 6;]]></ST>
+    </Implementation>
+    <LineIds Name="MAIN">
+      <LineId Id="131" Count="0" />
+      <LineId Id="137" Count="0" />
+      <LineId Id="136" Count="0" />
+      <LineId Id="138" Count="3" />
+      <LineId Id="146" Count="0" />
+      <LineId Id="153" Count="0" />
+      <LineId Id="174" Count="4" />
+      <LineId Id="158" Count="0" />
+      <LineId Id="151" Count="0" />
+      <LineId Id="154" Count="2" />
+      <LineId Id="164" Count="0" />
+      <LineId Id="163" Count="0" />
+      <LineId Id="165" Count="0" />
+      <LineId Id="162" Count="0" />
+      <LineId Id="166" Count="0" />
+      <LineId Id="159" Count="0" />
+      <LineId Id="169" Count="0" />
+      <LineId Id="157" Count="0" />
+      <LineId Id="170" Count="3" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
