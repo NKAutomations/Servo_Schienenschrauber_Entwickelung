@@ -10,7 +10,21 @@
 || |_| \_|_|\_\_/  \_\__,_|\__\___/|_| |_| |_|\__,_|\__|_|\___/|_| |_|       ||
 ||                                                                             ||
 \\=============================================================================//
-SERVOSCHRAUBER - Schubkastenschiene Nobilia Vorgabe  
+SERVOSCHRAUBER - Schraubprozess Schubkastenschiene Nobilia Vorgabe  
+
+Dieser Baustein beschreibt den reinen Schraubprozess, es wird lediglich die 
+Motoransteuerung übernommen, alles andere (Pneumatik und Schraubenzuführung) 
+kann weiterhin in dem standart Schrauber Baustein stattfinden. Dies sorgt
+für eine verbesserte Integration in bereits bestehende Systeme.
+
+Die Gesamte Motoransteuerung findet über die "IQ_SchrauberAchsStruc_InOut" -
+Achsstruktur statt, welche zusammen mit dem Baustein aufgerufen und beschrieben
+wird. 
+
+Über die "I_stSchraubParam" Struktur werden die Gesamten benötigten Parameter 
+an den Schrauber- Baustein übergeben. Diese Struktur kann unverändert
+durchgereicht werden.
+
 ================================================================================
 Vollautomatischer Servoschrauber für Schienen- und Einzelschrauben
 mit NC-Achsenanbindung, Drehmoment, Drehwinkel- und Tiefenüberwachung 
@@ -20,6 +34,7 @@ mit NC-Achsenanbindung, Drehmoment, Drehwinkel- und Tiefenüberwachung
 (*====================================================================================================================================================*)
 (*23/09/2025   	| 1.00      		| TC3		  		| N.Kersting       	| Neue Isolierte Version *)
 (*30/09/2025   	| 1.01      		| TC3		  		| N.Kersting       	| Erste Versuche ohne Motor  *)
+(*01/10/2025   	| 1.02      		| TC3		  		| N.Kersting       	| Neue Strukturen Integriert für Prozessdaten etc. *)
 (*====================================================================================================================================================*)
 FUNCTION_BLOCK fb_SKSSchraubNob
 VAR_INPUT
@@ -32,7 +47,6 @@ VAR_INPUT
 	
 	I_stSchraubParam	:ST_SchrauberAblauf_Parameter;	(* Speziefische Parameter für den Schruabprozess *)
 	
-	
 END_VAR
 VAR_OUTPUT
 	Q_sState			:STRING;
@@ -43,6 +57,8 @@ VAR_OUTPUT
 	Q_bSchrHalt			:BOOL;		(* Motor stoppen *)
 	Q_bAxisReset		:BOOL;				(* Achse zurücksetzen *)
 	Q_nTorque			:INT := 300;		(* Drehmomentgrenzwert [0.1%] *)
+	
+	Q_stProzessDaten	:ST_SchrauberAblauf_ProzessDaten;
 END_VAR
 VAR_IN_OUT
 	(* Schraubantrieb Achsstruktur InOut *)
@@ -84,6 +100,7 @@ VAR
 	nMaxDrehwinkel_F3				: LREAL;			
 	nDrehwinkelBerechnet			: LREAL; 			(* Der Maximale solldrehwinkel, welcher sich aus der Höhe, wo gestoppt wurde und der Schraubensteigung errechnet *)
 	nSchraubFallMerker				: INT;	
+	nDrehmomentSkalierVorgabe		: LREAL;
 	
 	(*========================================================================================================================*)
 	(* === Auswertung === *)
@@ -111,19 +128,31 @@ VAR
 	nPD_Drehwinkel					: LREAL;			(* Prozessdaten - erreichter Drehwinkel *)
 	tPD_Schraubtakt_Komplett		: TIME;				(* Prozessdaten - Zeit für den Kompletten Schraubprozess *)
 	tPD_Schraubtakt_Schrauben		: TIME;				(* Prozessdaten - Zeit nur für den Schraubvorgang ohne Zylinder bewegungen etc. *)
-	nDrehmomentSkalierVorgabe: LREAL;
+	iPD_Schraubfall					: INT;				(* Prozessdaten - Schraubfall *)		
+	bPD_SchraubVorgOk				: BOOL;				(* Prozessdaten - Schraubvorgang OK *)
+	
 END_VAR
 ]]></Declaration>
     <Implementation>
       <ST><![CDATA[fSchraubTiefeIst :=	I_lrActPosTiefe;
 
+(* === Hauptablauf === *)
 ac_Hauptablauf();
 
+(* === DREHMOMENT-MITTELWERTBILDUNG === *)
+m_DrehmomentMittelwert();
+
+(* === SCHRAUBTAKT-ZEITMESSUNG === *)
+m_SchraubtaktMessung();
+
+(* === Ausgänge zuweisen === *)
 m_Ausgangszuweisung();
+
 ]]></ST>
     </Implementation>
     <Folder Name="Ablauf" Id="{fafa4d6d-6f22-46f3-bf08-cf1d510a3348}" />
     <Folder Name="Ausgang" Id="{6aba5681-4e5c-480a-99f0-c6a63017ffef}" />
+    <Folder Name="Diagnose" Id="{30f33323-bedf-4681-9716-d32c8fe17ccb}" />
     <Folder Name="Drehmoment" Id="{4f4c9446-1ae7-4f1c-abfe-f801565df70b}" />
     <Folder Name="Pruefung" Id="{85b2db60-3bc3-4c45-ab1d-146f31338f7e}" />
     <Folder Name="Rechner" Id="{a1e596fa-1c68-4ed0-91bf-d850752cd9d3}" />
@@ -261,6 +290,18 @@ THEN
 		IF I_bStart
 			AND Q_nTorque <>0
 		THEN
+			(* Prozessdaten auf 0 setzen *)
+			nPD_Tiefe						:= 0;			(* Prozessdaten - erreichte Tiefe *)
+			nPD_Drehmoment					:= 0;			(* Prozessdaten - erreichtes Drehmoment *)
+			nPD_Drehwinkel					:= 0;			(* Prozessdaten - erreichter Drehwinkel *)
+			tPD_Schraubtakt_Komplett		:= T#0S;		(* Prozessdaten - Zeit für den Kompletten Schraubprozess *)
+			tPD_Schraubtakt_Schrauben		:= T#0S;		(* Prozessdaten - Zeit nur für den Schraubvorgang ohne Zylinder bewegungen etc. *)
+			iPD_Schraubfall					:= 0;			(* Prozessdaten - Schraubfall *)		
+			bPD_SchraubVorgOk				:= FALSE;		(* Prozessdaten - Schraubvorgang OK *)
+			bDrehmomOkMem					:= FALSE;
+			bDrehwinkelOkMem				:= FALSE;
+			bTiefeOkMem						:= FALSE;
+			nSchraubFallMerker				:= 0;
 			nStep := 45;
 		END_IF
 		
@@ -545,13 +586,20 @@ THEN
 			bAchsreset := TRUE;
 			tonTimeOver.IN := FALSE;
 			
-			(* Fehler auswerten *)
-			IF nFehlerSchrittMerker <> 0
-			THEN
-				nStep := nFehlerSchrittMerker;
-			ELSE
-				nStep := 100;
-			END_IF
+			nStep := 80;
+		END_IF
+
+(*================================================================================================================*)
+	80: (* === AUSWERTUNG FEHLERSCHRITTMERKER === *)
+		sStep := 'Fehlerschritt auswerten';
+		
+		(* Fehler auswerten *)
+		IF nFehlerSchrittMerker <> 0
+		THEN
+			nStep := nFehlerSchrittMerker;
+		ELSE
+			bPD_SchraubVorgOk := TRUE;
+			nStep := 100;
 		END_IF
 				
 (*================================================================================================================*)
@@ -744,7 +792,7 @@ END_IF
 (* Prozessdaten Merker schreiben *)
 (*========================================================*)
 IF (nStep >= 55)
-	AND (nStep <= 70)
+	AND (nStep < 70)
 THEN
 	(* Prozessdaten Drehwinkel Schreiben *)
 	IF nDrehwinkelMem> nPD_Drehwinkel
@@ -761,7 +809,23 @@ THEN
 	THEN
 		nPD_Drehmoment :=	fDrehmomentIstMittel;
 	END_IF
+	
+	iPD_Schraubfall :=	nSchraubFallMerker;
 END_IF
+
+(*========================================================*)
+(* Prozessdaten Struktur schreiben *)
+(*========================================================*)
+Q_stProzessDaten.nPD_Drehmoment				:=	nPD_Drehmoment;
+Q_stProzessDaten.nPD_Drehwinkel				:=	nPD_Drehwinkel;
+Q_stProzessDaten.nPD_Tiefe					:=	nPD_Tiefe;
+Q_stProzessDaten.tPD_Schraubtakt_Komplett	:=	tPD_Schraubtakt_Komplett;
+Q_stProzessDaten.tPD_Schraubtakt_Schrauben	:=	tPD_Schraubtakt_Schrauben;
+Q_stProzessDaten.iPD_Schraubfall			:=	iPD_Schraubfall;
+Q_stProzessDaten.bPD_SchraubVorgOk			:=	bPD_SchraubVorgOk;
+Q_stProzessDaten.bPD_DrehmomOk				:=	bDrehmomOkMem;
+Q_stProzessDaten.bPD_DrehwinkelOk			:=	bDrehwinkelOkMem;
+Q_stProzessDaten.bPD_TiefeOk				:=	bTiefeOkMem;
 ]]></ST>
       </Implementation>
     </Action>
@@ -1322,6 +1386,37 @@ END_IF
 ]]></ST>
       </Implementation>
     </Method>
+    <Method Name="m_SchraubtaktMessung" Id="{0bd72a6b-78b6-4b56-acc0-b6d291daa095}" FolderPath="Diagnose\">
+      <Declaration><![CDATA[METHOD m_SchraubtaktMessung : BOOL
+VAR_INPUT
+END_VAR
+(*
+================================================================================
+SCHRAUBTAKT-ZEITMESSUNG
+================================================================================
+Misst die Schraubzeit für Diagnose und Optimierung.
+Die Zeitmessung erfolgt während der aktiven Schraubphase.
+================================================================================
+*)]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[(* Komplett wird nicht verwendet, da ausgelagert in dem Übergeordneten Schrauberbaustein *)
+(*fbtimeDiff_Komplettt(
+	bStart:= 		(nStep =10),	 
+	bStop:= 		(nStep =100), 
+	bReset:= 		(nStep =10),
+	tDiffTime=> 	tPD_Schraubtakt_Komplett);*)
+	
+tPD_Schraubtakt_Komplett := T#0MS;
+
+(* Zeitmessung Schruabvorgang *)
+fbtimeDiff_Schraub(
+	bStart:= 		(nStep =45),	 
+	bStop:= 		(nStep =80), 
+	bReset:= 		(nStep =10),
+	tDiffTime=> 	tPD_Schraubtakt_Schrauben);
+]]></ST>
+      </Implementation>
+    </Method>
     <Method Name="m_TiefenPruefung" Id="{a103558d-0397-404b-aa38-f8b16ef7498c}" FolderPath="Pruefung\">
       <Declaration><![CDATA[METHOD m_TiefenPruefung : BOOL
 VAR_INPUT
@@ -1348,10 +1443,18 @@ END_IF]]></ST>
     </Method>
     <LineIds Name="fb_SKSSchraubNob">
       <LineId Id="9" Count="0" />
+      <LineId Id="457" Count="0" />
       <LineId Id="299" Count="0" />
       <LineId Id="298" Count="0" />
-      <LineId Id="301" Count="0" />
-      <LineId Id="300" Count="0" />
+      <LineId Id="461" Count="0" />
+      <LineId Id="452" Count="0" />
+      <LineId Id="450" Count="0" />
+      <LineId Id="462" Count="1" />
+      <LineId Id="454" Count="0" />
+      <LineId Id="464" Count="0" />
+      <LineId Id="455" Count="0" />
+      <LineId Id="439" Count="0" />
+      <LineId Id="458" Count="0" />
       <LineId Id="302" Count="0" />
     </LineIds>
     <LineIds Name="fb_SKSSchraubNob.ac_AblaufLeerlaufPruef">
@@ -1404,7 +1507,12 @@ END_IF]]></ST>
       <LineId Id="1578" Count="2" />
       <LineId Id="1540" Count="0" />
       <LineId Id="1581" Count="0" />
-      <LineId Id="1541" Count="1" />
+      <LineId Id="1541" Count="0" />
+      <LineId Id="1612" Count="0" />
+      <LineId Id="1606" Count="5" />
+      <LineId Id="1605" Count="0" />
+      <LineId Id="1629" Count="3" />
+      <LineId Id="1542" Count="0" />
       <LineId Id="1399" Count="0" />
       <LineId Id="1543" Count="0" />
       <LineId Id="303" Count="4" />
@@ -1471,13 +1579,16 @@ END_IF]]></ST>
       <LineId Id="1435" Count="0" />
       <LineId Id="583" Count="0" />
       <LineId Id="1559" Count="0" />
-      <LineId Id="1566" Count="0" />
-      <LineId Id="1560" Count="1" />
-      <LineId Id="1565" Count="0" />
-      <LineId Id="1563" Count="1" />
       <LineId Id="1562" Count="0" />
       <LineId Id="585" Count="0" />
+      <LineId Id="1613" Count="2" />
       <LineId Id="1377" Count="0" />
+      <LineId Id="1617" Count="0" />
+      <LineId Id="1619" Count="4" />
+      <LineId Id="1634" Count="0" />
+      <LineId Id="1624" Count="0" />
+      <LineId Id="1618" Count="0" />
+      <LineId Id="1616" Count="0" />
       <LineId Id="665" Count="5" />
       <LineId Id="672" Count="2" />
       <LineId Id="676" Count="3" />
@@ -1542,8 +1653,15 @@ END_IF]]></ST>
       <LineId Id="1508" Count="2" />
       <LineId Id="1415" Count="0" />
       <LineId Id="1511" Count="0" />
-      <LineId Id="1102" Count="28" />
+      <LineId Id="1102" Count="27" />
+      <LineId Id="1600" Count="1" />
+      <LineId Id="1130" Count="0" />
+      <LineId Id="1596" Count="2" />
+      <LineId Id="1590" Count="0" />
       <LineId Id="1" Count="0" />
+      <LineId Id="1591" Count="4" />
+      <LineId Id="1599" Count="0" />
+      <LineId Id="1625" Count="3" />
     </LineIds>
     <LineIds Name="fb_SKSSchraubNob.ac_Schraubfall1">
       <LineId Id="63" Count="0" />
@@ -1679,6 +1797,15 @@ END_IF]]></ST>
       <LineId Id="20" Count="0" />
       <LineId Id="19" Count="0" />
       <LineId Id="15" Count="0" />
+    </LineIds>
+    <LineIds Name="fb_SKSSchraubNob.m_SchraubtaktMessung">
+      <LineId Id="32" Count="5" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="38" Count="0" />
+      <LineId Id="56" Count="0" />
+      <LineId Id="54" Count="0" />
+      <LineId Id="39" Count="4" />
+      <LineId Id="31" Count="0" />
     </LineIds>
     <LineIds Name="fb_SKSSchraubNob.m_TiefenPruefung">
       <LineId Id="17" Count="8" />

@@ -2298,7 +2298,7 @@ bReset := rtrigReset.Q
 		OR I_bResetTeststation;				(* Test-Reset für Steuerungstechniker *)]]></ST>
       </Implementation>
     </Method>
-    <Method Name="m_LoggingUndDiagnose" Id="{95c98cd5-4f3d-4d36-ba15-9d9001d86ce7}" FolderPath="Sonstiges\">
+    <Method Name="m_LoggingUndDiagnose" Id="{ca2f817d-3617-4e6b-997a-368ef198952e}" FolderPath="Sonstiges\">
       <Declaration><![CDATA[METHOD m_LoggingUndDiagnose : BOOL
 VAR_INPUT
 END_VAR
@@ -2362,7 +2362,7 @@ END_IF
 ]]></ST>
       </Implementation>
     </Method>
-    <Method Name="m_SchraubtaktMessung" Id="{0bd72a6b-78b6-4b56-acc0-b6d291daa095}" FolderPath="Sonstiges\">
+    <Method Name="m_SchraubtaktMessung" Id="{e5d96da8-03f5-478e-8bf8-01a36c2f3c91}" FolderPath="Sonstiges\">
       <Declaration><![CDATA[METHOD m_SchraubtaktMessung : BOOL
 VAR_INPUT
 END_VAR

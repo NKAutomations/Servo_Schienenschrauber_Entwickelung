@@ -85,6 +85,8 @@ VAR_OUTPUT
 	Q_bModuloBetrArt			: BOOL;
 
 	Q_sStatus					: STRING(255);	//Informationen zu dem aktuellen Ablaufschritt
+	
+	Q_stProzessDaten			:ST_SchrauberAblauf_ProzessDaten;
 END_VAR
 VAR_IN_OUT
 	IQ_fbObjSchlauch			: FB_Obj_IOSchlauch;				// Schlauch
@@ -480,6 +482,7 @@ END_VAR]]></Declaration>
 			Q_bSchrHalt=> 						Q_bSchrHalt, 
 			Q_bAxisReset=> 						bAchsreset, 
 			Q_nTorque=> 						Q_nTorque, 
+			Q_stProzessDaten=>					Q_stProzessDaten,
 			IQ_SchrauberAchsStruc_InOut:= 		stSchrauberAchsStruc_InOut);
    				
    		IF	fbSKSSchraubNob.Q_bError 
@@ -730,6 +733,7 @@ END_VAR]]></Declaration>
    		fbSKSSchraubNob(
 			Q_sState=> 							sStep, 
 			Q_nErrorId=> 						Q_nErrorId, 
+			Q_stProzessDaten=>					Q_stProzessDaten,
 			IQ_SchrauberAchsStruc_InOut:= 		stSchrauberAchsStruc_InOut);
 		
 		IF I_bQuittFehler
@@ -1073,6 +1077,7 @@ END_IF
       <LineId Id="1248" Count="3" />
       <LineId Id="1294" Count="0" />
       <LineId Id="1253" Count="9" />
+      <LineId Id="1434" Count="0" />
       <LineId Id="1247" Count="0" />
       <LineId Id="1245" Count="0" />
       <LineId Id="1408" Count="0" />
@@ -1149,6 +1154,7 @@ END_IF
       <LineId Id="1424" Count="0" />
       <LineId Id="1428" Count="0" />
       <LineId Id="1432" Count="0" />
+      <LineId Id="1435" Count="0" />
       <LineId Id="1416" Count="0" />
       <LineId Id="1310" Count="0" />
       <LineId Id="831" Count="6" />

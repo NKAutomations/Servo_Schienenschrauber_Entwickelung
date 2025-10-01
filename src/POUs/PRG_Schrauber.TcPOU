@@ -576,10 +576,10 @@ arrStartAusf[cAxis1261_Schrauber1](
 	I_bAchseFrgGrdP		:=	TRUE,
 	I_bAchseFrgArbP		:= TRUE,
 	I_bAchseFrgRglP		:= FALSE,
-	I_bAchseStopPos		:= 	fbSchrauber_PnP_Entwickel_3.Q_bSchrHalt,
+	I_bAchseStopPos		:= 	fbSchrauber_PnP_Entwickel_4.Q_bSchrHalt,
 	I_nStreckeRglP		:= 2);
 	
-arrNcAchsen[cAxis1261_Schrauber1].stAuftrg.bPTP_halt	:= fbSchrauber_PnP_Entwickel_3.Q_bSchrHalt;
+arrNcAchsen[cAxis1261_Schrauber1].stAuftrg.bPTP_halt	:= fbSchrauber_PnP_Entwickel_4.Q_bSchrHalt;
 
 (*=============================================================================================*)
 (* Achsansteurung *)
@@ -674,9 +674,14 @@ stSKSSchrauberInOut_Vis_Schr_1.Q_nActPos	:=	arrNcAchsen[cAxis1261_Schrauber1].fP
 stSKSSchrauberInOut_Vis_Schr_1.Q_nActDepth	:=	arrNcAchsen[cEnc03_Schrauber1].fPosIstwert;
 stSKSSchrauberInOut_Vis_Schr_1.Q_nActTorque	:=	arrNcAchsen[cAxis1261_Schrauber1].stEinAusG.I_nDrehmomentIstwert;
 
-stSKSSchrauberInOut_Vis_Schr_1.Q_nLastDepth		:=	fbSchrauber_PnP_Entwickel_4.fbSKSSchraubNob.nPD_Tiefe;
-stSKSSchrauberInOut_Vis_Schr_1.Q_nLastTorque	:=	fbSchrauber_PnP_Entwickel_4.fbSKSSchraubNob.nPD_Drehmoment;
-stSKSSchrauberInOut_Vis_Schr_1.Q_nLastAngle		:=	fbSchrauber_PnP_Entwickel_4.fbSKSSchraubNob.nPD_Drehwinkel;
+stSKSSchrauberInOut_Vis_Schr_1.Q_nLastDepth		:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.nPD_Tiefe;
+stSKSSchrauberInOut_Vis_Schr_1.Q_nLastTorque	:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.nPD_Drehmoment;
+stSKSSchrauberInOut_Vis_Schr_1.Q_nLastAngle		:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.nPD_Drehwinkel;
+stSKSSchrauberInOut_Vis_Schr_1.Q_iSchraubfall	:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.iPD_Schraubfall;
+stSKSSchrauberInOut_Vis_Schr_1.Q_bSchraubVorgOk	:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.bPD_SchraubVorgOk;
+
+stSKSSchrauberInOut_Vis_Schr_1.Q_tSchraubtakt_Komplett	:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.tPD_Schraubtakt_Komplett;
+stSKSSchrauberInOut_Vis_Schr_1.Q_tSchraubtakt_Schrauben	:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.tPD_Schraubtakt_Schrauben;
 (*=============================================================================================*)	
 (* Output Übergabe *)
 
@@ -735,21 +740,21 @@ CASE iAuswSchrauberMode OF
 
 4:	(*=============================================================================================*)	
 	(* Statusschnittstelle *)
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.bDrehmomentErhoehung	:=	fbSchrauber_PnP_Entwickel_3.bDrehmomentErhoehen;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.bDrehmomentOk			:=	fbSchrauber_PnP_Entwickel_3.bDrehmomOkMem;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.bDrehwinkelOk			:=	fbSchrauber_PnP_Entwickel_3.bDrehwinkelOkMem;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.bTiefeOk				:=	fbSchrauber_PnP_Entwickel_3.bTiefeOkMem;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.iSchraubfall			:=	fbSchrauber_PnP_Entwickel_3.nSchraubFallMerker;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nActDrehmoment		:=	fbSchrauber_PnP_Entwickel_3.fDrehmomentIstMittel;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nActPos				:=	fbSchrauber_PnP_Entwickel_3.stSchrauberAchsStruc_InOut.NC_Axis_IN_nActPos;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nActTiefe				:=	fbSchrauber_PnP_Entwickel_3.fSchraubTiefeIst;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nActVelo				:=	fbSchrauber_PnP_Entwickel_3.stSchrauberAchsStruc_InOut.NC_Axis_IN_nActVelo;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nSollDrehmoment		:=	fbSchrauber_PnP_Entwickel_3.nSollDrehmomentErrechnet;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nSollVelo				:=	fbSchrauber_PnP_Entwickel_3.stSchrauberAchsStruc_InOut.NC_Axis_OUT_nPTPVelo;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nStep					:=	fbSchrauber_PnP_Entwickel_3.nStep;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nActDrehwinkel		:=	fbSchrauber_PnP_Entwickel_3.nDrehwinkelMem;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.tSchraubtaktKomplett	:=	fbSchrauber_PnP_Entwickel_3.tPD_Schraubtakt_Komplett;
-	GlobVar_SchrauberStatus.stSchrauberStatusDiag.tSchraubtaktSchrauben	:=	fbSchrauber_PnP_Entwickel_3.tPD_Schraubtakt_Schrauben;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.bDrehmomentErhoehung	:=	fbSchrauber_PnP_Entwickel_4.fbSKSSchraubNob.bDrehmomentErhoehen;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.bDrehmomentOk			:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.bPD_DrehmomOk;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.bDrehwinkelOk			:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.bPD_DrehwinkelOk;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.bTiefeOk				:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.bPD_TiefeOk;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.iSchraubfall			:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.iPD_Schraubfall;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nActDrehmoment		:=	fbSchrauber_PnP_Entwickel_4.fbSKSSchraubNob.fDrehmomentIstMittel;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nActPos				:=	fbSchrauber_PnP_Entwickel_4.stSchrauberAchsStruc_InOut.NC_Axis_IN_nActPos;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nActTiefe				:=	fbSchrauber_PnP_Entwickel_4.fSchraubTiefeIst;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nActVelo				:=	fbSchrauber_PnP_Entwickel_4.stSchrauberAchsStruc_InOut.NC_Axis_IN_nActVelo;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nSollDrehmoment		:=	fbSchrauber_PnP_Entwickel_4.fbSKSSchraubNob.nSollDrehmomentErrechnet;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nSollVelo				:=	fbSchrauber_PnP_Entwickel_4.stSchrauberAchsStruc_InOut.NC_Axis_OUT_nPTPVelo;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nStep					:=	fbSchrauber_PnP_Entwickel_4.nStep;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.nActDrehwinkel		:=	fbSchrauber_PnP_Entwickel_4.fbSKSSchraubNob.nDrehwinkelMem;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.tSchraubtaktKomplett	:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.tPD_Schraubtakt_Komplett;
+	GlobVar_SchrauberStatus.stSchrauberStatusDiag.tSchraubtaktSchrauben	:=	fbSchrauber_PnP_Entwickel_4.Q_stProzessDaten.tPD_Schraubtakt_Schrauben;
 5:	;
 6:	;
 END_CASE
@@ -935,6 +940,9 @@ END_CASE
       <LineId Id="109" Count="0" />
       <LineId Id="134" Count="0" />
       <LineId Id="137" Count="0" />
+      <LineId Id="161" Count="1" />
+      <LineId Id="165" Count="0" />
+      <LineId Id="163" Count="1" />
       <LineId Id="110" Count="7" />
       <LineId Id="139" Count="0" />
       <LineId Id="156" Count="0" />
