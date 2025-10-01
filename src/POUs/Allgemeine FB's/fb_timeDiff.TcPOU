@@ -1,0 +1,48 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="fb_timeDiff" Id="{e8b25fdb-5b71-4865-b26f-ea9e43c53116}" SpecialFunc="None">
+    <Declaration><![CDATA[(*---------------------------------------------------------------------------------------------------------------------*)
+(*		FB: 				timeDiff										*)
+(*		Beschreibung: 	Zum ermitteln einer Zeitdifferenz					*)
+(*		Autor: 			N.Kersting									*)
+(*		Datum:			05.11.2022									*)
+(*		Version:			1.0.1											*)
+(*---------------------------------------------------------------------------------------------------------------------*)
+
+FUNCTION_BLOCK fb_timeDiff
+VAR_INPUT
+	bStart	:BOOL;
+	bStop	:BOOL;
+	bReset	:BOOL;
+END_VAR
+VAR_OUTPUT
+	tDiffTime	:TIME;
+END_VAR
+VAR
+	tStart	:TIME;
+	tStop	:TIME;
+
+	rTrigStart:	R_TRIG;
+	rTrigStop:	R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rTrigStart(CLK:=bStart , Q=> );
+rTrigStop(CLK:=bStop , Q=> );
+
+IF	bReset	THEN	tStart:= t#0s;
+					tStop:=t#0s;
+ELSE
+
+	IF	rTrigStop.Q	THEN	tStart:= 		TIME();
+							tDiffTime:=	tStart-tStop;
+	END_IF
+
+	IF	rTrigStart.Q	THEN	tStop:=		TIME();
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="fb_timeDiff">
+      <LineId Id="24" Count="13" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

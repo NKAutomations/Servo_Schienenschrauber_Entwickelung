@@ -1,0 +1,1259 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_Schrauber_PnP_4" Id="{4a9b442a-b845-400d-9b4b-3f87d3862cfc}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Schrauber_PnP_4
+// Version history:	
+// 
+// Bei Autoquit wird einmalig nach Zeit > T#0ms quittiert.
+// Erst wieder nach erfolgreicher Bearbeitung kann ein Autoquit wieder aktiv werden.
+// ( Vermeiden von Endlosschleifen von Fehlern )
+// 
+// Date          | Version    | created under        | Author          | Remark 
+// ---------------------------------------------------------------------------------------- 
+// ....          | ...        | ...                  | ...             | ...
+
+
+VAR_INPUT
+	
+	I_bResetTeststation				: BOOL;		(* Hinzugefügt für Testaufbau im Steuerungstechniker Büro um den Baustein zu Quittieren !!*)
+	
+	I_bTaktFrg						: BOOL;
+	I_bTaktStop						: BOOL;
+	I_bAuto							: BOOL;
+	I_bHand							: BOOL;
+	I_bQuittFehler					: BOOL;
+	I_bGrundstellung				: BOOL;
+	I_bSchutzbereichOK			: BOOL;
+
+	I_sSourceBeschreibung		: STRING;
+	I_sPosBeschreibung			: STRING := 'Schrauber';
+
+	I_bTaktStart					: BOOL;	(*Start Schienenschrauben*)
+	I_bTaktStartHalb				: BOOL;	(*Start Schraube halb rein für z.B. Metalltravere*)
+
+	I_bGrdstlgSchrEinh			: BOOL;
+	I_bZustellZylAusgef			: BOOL;
+
+	I_fSchraubTiefeAuswurf		: LREAL;
+
+	I_fTiefentoleranzPositiv	: LREAL:=1;	(* Z.B. 3 bedeutet, dass von Solltiefe bis + 3mm wir im Ziel liegen *)
+	I_fTiefentoleranzNegativ	: LREAL:=0.5;	(* Z.B. 3 bedeutet, dass von Solltiefe bis - 3mm wir im Ziel liegen *)
+	I_nAchsId						: INT;
+	I_nEncId							: INT;
+
+	I_stParam						: ST_ParamSKSServoschrauber;
+	I_stSchraubParam				: ST_SchrauberAblauf_Parameter;	(* Prozessparameter *)
+	
+	I_tAutoQuit					: TIME :=T#0MS; (*default nicht aktiv -> 0ms *)
+	
+	I_bSchraubeNachschiessen	: BOOL;
+	I_bReferenzfahrtAktiv		: BOOL;
+
+	I_bFreigabeAuswerfen			: BOOL;
+	
+	I_sDateipfad					: STRING;
+	I_bSchrauberLogOn				: BOOL;	// Umbennen in I_bSchrauberAbwahl
+
+	I_nMotorHersteller			: INT; //0: BRC; 1: Beckhoff
+	
+	//Umbau Weber --> Boellhoff-/Huettenhoelscherschrauber
+	I_bHuettenSchr					: BOOL := FALSE;
+
+END_VAR
+
+VAR_OUTPUT
+	Q_bBusy						: BOOL;
+	Q_bDone						: BOOL;
+	Q_bError						: BOOL;
+
+	Q_sPosZustand				: STRING := '';
+	Q_bGrundstellungAktiv	: BOOL;
+	Q_bGrundstellungOk		: BOOL;
+
+	Q_bSchraubHub				: BOOL;
+	Q_bSchrAuswurf				: BOOL;
+	Q_bSchrHalt					: BOOL;
+	Q_nTorque					: INT:=300;
+	Q_bAxisReset				: BOOL;
+	Q_nErrorId					: INT;
+	Q_bDrehmomentFehler		: BOOL;
+	Q_bTuerFreigabe			: BOOL;
+	
+	Q_nStep						: INT;
+	Q_strStep					: STRING;
+	
+	Q_bModuloBetrArt			: BOOL;
+
+	Q_sStatus					: STRING(255);	//Informationen zu dem aktuellen Ablaufschritt
+END_VAR
+VAR_IN_OUT
+	IQ_fbObjSchlauch			: FB_Obj_IOSchlauch;				// Schlauch
+	
+	IQ_stMeldung				: ST_MeldServoSchrauber_1;		// Meldung
+
+END_VAR
+VAR
+	objError_Schrauber		: FB_Obj_Error_Schrauber;
+
+	bSchrAuswurfStart			: BOOL;
+	bSchraubHub					: BOOL;
+	bSchrAuswurf				: BOOL;
+	
+	bModuloBetrArt				: BOOL;
+	
+	fSchraubTiefeIst			: LREAL;
+	arrDrehmomentIst			: ARRAY [0..10] OF LREAL;
+	fDrehmomentIstMittel		: LREAL;
+	tonAnlauf					: TON;
+	tonStillstandAchse		: TON;
+	tonStillstandVorschub	: TON;
+	tonStillstVorschubDelay	: TON;
+	fIstPosAchseAlt			: LREAL;
+	fIstPosVorschubAlt		: LREAL;
+	bStillstandAchse			: BOOL;
+	bStillstandVorschub		: BOOL;
+	nFehlerSchrittMerker		: INT;
+	nFehlerZaehler				: INT;
+	tonVerzStillstand			: TON;
+	fReduzGeschwFaktor		: LREAL:= 0.025;	(* Reduzierter Geschwindigkeitsfaktur *)
+
+	rtrigReset					: R_TRIG;
+	bReset						: BOOL;
+	bAchsreset					: BOOL;
+
+	bAutoquitAktiv				: BOOL;
+	tonAutoquit					: TON;
+	tonTimeOver1				: TON;
+
+	idx							: INT;
+
+(* Schrittkette Grund*)
+	nStepGrund  				: INT;
+	nOldStepGrund				: INT;
+	tonTimeOverGrund			: TON;
+
+(* Schrittkette Auto*)
+	nStep  						: INT;
+	sStep							: STRING;
+	nOldStep						: INT;
+	tonDelay1					: TON;
+	
+	tonSchraubtakt				: TON;
+	timeSchraubtakt			: TIME;
+	arrLetzteTiefe				: ARRAY[0..100] OF LREAL;
+	arrLetzteFehler			: ARRAY[0..100] OF LREAL;
+	arrLetzteMomente			: ARRAY[0..100] OF LREAL;
+	arrLetzteSchraubzeit		: ARRAY[0..100] OF TIME;
+	ftrigStep60					: F_TRIG;
+	bSchraubtest				: BOOL;
+	nTestmoment					: UINT:=320;
+
+	tonTimeOutSchrauber				: TON;
+	nAnzahlSchraubspitzenKlemmer	: DINT;
+	tonNotPosiFrg: TON;
+	rtrigStep70: R_TRIG;
+	ftrigStep70: F_TRIG;
+	rtrigStepError: R_TRIG;
+	
+	fbMittelwert			: FB_Mittelwert;
+	
+	
+	fSchraubTiefeIstTest				: LREAL;
+	nTiefeBeimAufsetzen				: LREAL;
+	bTiefeBeimAufsetzenOK			: BOOL;
+
+	//Log
+	fbStepHistory						: FB_StepHistory;
+
+	fbLogToFile							: FB_LogFile_Schrauber;
+	rtrigStueckzaehler				: R_TRIG;
+	nStueckzaehler						: INT;
+	rtrigSchrauberfehler				: R_TRIG;
+	nTestStep1: INT;
+	nTestStep2: INT;
+	nTestStep3: INT;
+	
+	fbSKSSchraubNob						:fb_SKSSchraubNob;
+	stSchrauberAchsStruc_InOut			:ST_SchrauberAblauf_AchsStruc;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	(* Reset *)
+	rtrigReset(
+		CLK:=IQ_fbObjSchlauch.I_bTasteNachruetteln);
+		
+	bReset:=rtrigReset.Q
+			AND NOT (nStep = 10 OR nStep = 90)
+			OR I_bResetTeststation;(* Hinzugefügt für Testaufbau im Steuerungstechniker Büro um den Baustein zu Quittieren !!*)
+
+	a_Ablauf();
+	e_Error();
+	l_Log();
+	o_Output();
+
+
+	fReduzGeschwFaktor		:= 0.005;	(* Reduzierter Geschwindigkeitsfaktur *)
+	]]></ST>
+    </Implementation>
+    <Action Name="a_Ablauf" Id="{95831a62-5fb9-4bf2-91c6-ea8c92d9fa85}">
+      <Implementation>
+        <ST><![CDATA[IF NOT bReset THEN
+	CASE nStep OF
+	/////////////////////////////////////////////
+	0: sStep												:='Setzen_Init';
+	
+		bSchraubHub										:= FALSE;
+		bSchrAuswurf									:= FALSE;
+		bAutoquitAktiv 								:= FALSE;
+		bSchraubtest									:= FALSE;
+		arrNcAchsen[I_nAchsId].stEinAusG.Q_nSignalsteuerwort.1	:= FALSE;
+		tonNotPosiFrg(IN:=FALSE);
+
+		IF I_bTaktFrg
+		 AND NOT I_bGrundstellung THEN
+			nStep := 10;
+		END_IF
+
+	/////////////////////////////////////////////
+	10: sStep											:='Start';
+	
+		(* Schrauberablauf reset ausführen *)
+		fbSKSSchraubNob(
+			I_bStart:= 						FALSE, 
+			I_bFreigabe:= 					FALSE, 
+			I_bReset:= 						TRUE, 	
+			I_bQuittFehler:= 				TRUE, 
+			Q_bAxisReset=> 					bAchsreset, 
+			Q_nTorque=> 					Q_nTorque, 
+			IQ_SchrauberAchsStruc_InOut:= 	stSchrauberAchsStruc_InOut);
+			
+		nFehlerSchrittMerker							:= 0;
+		bTiefeBeimAufsetzenOK						:= FALSE;
+		bModuloBetrArt									:= TRUE;
+
+		tonNotPosiFrg(IN:=(NOT arrNcAchsen[I_nAchsId].stAuftrg.bPTP_PosiFrg
+								AND arrNcAchsen[I_nAchsId].stEinAusG.I_nDCStatusword.13) // Am Regler steht ein Fehler an
+								OR arrNcAchsen[I_nAchsId].bNcFehler,PT:=T#10S);
+
+		bAchsreset :=
+					tonNotPosiFrg.Q
+					AND bTakt2langsam;
+
+		IF NOT I_bReferenzfahrtAktiv
+		THEN
+			arrNcAchsen[I_nAchsId].stEinAusG.Q_nSignalsteuerwort.1			:= FALSE;
+			arrNcAchsen[I_nAchsId].stGrdfkt.bIstw_setz	:= FALSE;
+			arrStartAusf[I_nAchsId].I_bAchseZurArbP		:= FALSE;
+		END_IF
+
+		IF I_bSchraubeNachschiessen
+		THEN
+			IQ_fbObjSchlauch.I_bSchrauberBelegt:= FALSE;
+		END_IF
+						
+		//AuswerfenStart
+		IF (bSchrAuswurfStart
+			OR IQ_fbObjSchlauch.I_bSchrAuswurfStart
+			OR IQ_fbObjSchlauch.I_bTasteVereinzelung)
+			AND NOT I_bTaktStop
+		THEN
+			IQ_fbObjSchlauch.I_bSchrAuswurfStart :=
+			bSchrAuswurfStart := FALSE;
+			tonTimeOver1(IN:=FALSE);
+			nStep := 200;
+			bAchsreset											:= FALSE;
+
+		//Nachladen
+		ELSIF NOT IQ_fbObjSchlauch.I_bSchrauberBelegt
+			AND IQ_fbObjSchlauch.I_bSchlauchBelegt
+			AND NOT I_bQuittFehler
+			AND NOT I_bTaktStop
+			THEN
+				IF I_bHuettenSchr
+				THEN
+					tonTimeOver1(IN := TRUE, PT := t#0ms);
+					bSchrAuswurf:=FALSE;
+					
+					//Warten bis Schrauberstange oben
+					IF tonTimeOver1.Q
+					THEN
+						tonTimeOver1(IN := FALSE);
+						nStep := 11;
+					END_IF
+				ELSE
+					bSchrAuswurf:=TRUE;
+					nStep := 11;
+				END_IF
+				bAchsreset											:= FALSE;
+
+		//SetzenStart	-	Schienenschraube
+		ELSIF IQ_fbObjSchlauch.I_bSchrauberBelegt
+			AND I_bTaktStart
+			AND NOT I_bTaktStop
+			AND NOT I_bTaktStartHalb
+			AND arrNcAchsen[I_nAchsId].stAuftrg.bPTP_PosiFrg
+			AND I_bTaktFrg
+			AND NOT I_bQuittFehler
+			OR bSchraubtest
+			THEN
+				arrNcAchsen[I_nAchsId].stEinAusG.Q_nSignalsteuerwort.1					:= TRUE;
+				arrNcAchsen[I_nAchsId].stGrdfkt.bIstw_setz			:= TRUE;
+				arrNcAchsen[I_nAchsId].stGrdfkt.fIstSetzwert			:= 0;
+				Q_nTorque														:= 3000;
+				Q_bDrehmomentFehler 											:= FALSE;
+         	
+				bAchsreset:=FALSE;
+				nStep 															:= 20;
+
+		//SetzenStart	-	Einzelschraube halb rein für z.B. Metalltraver
+		ELSIF IQ_fbObjSchlauch.I_bSchrauberBelegt
+			AND NOT I_bTaktStart
+			AND I_bTaktStartHalb
+			AND NOT I_bTaktStop
+			AND arrNcAchsen[I_nAchsId].stAuftrg.bPTP_PosiFrg
+			AND I_bTaktFrg
+			AND NOT I_bQuittFehler
+			THEN
+				arrNcAchsen[I_nAchsId].stEinAusG.Q_nSignalsteuerwort.1					:= TRUE;
+				arrNcAchsen[I_nAchsId].stGrdfkt.bIstw_setz			:= TRUE;
+				arrNcAchsen[I_nAchsId].stGrdfkt.fIstSetzwert			:= 0;
+				Q_nTorque														:= 3000;
+
+			IF bSchraubtest
+			THEN
+				Q_nTorque:= nTestmoment;
+			END_IF
+
+			bAchsreset:=FALSE;
+			nStep 	:= 20;
+
+		END_IF
+
+	/////////////////////////////////////////
+	11: sStep		:='Nachladen';
+
+		IF (IQ_fbObjSchlauch.I_bSchrauberBelegt
+			OR IQ_fbObjSchlauch.I_bTasteVereinzelung)
+			AND NOT IQ_fbObjSchlauch.I_bNachladenaktiv
+
+		THEN
+			bSchrAuswurf	:= FALSE;
+			tonTimeOver1(IN:= FALSE);
+			nStep 			:= 12;
+		END_IF
+		
+	/////////////////////////////////////////
+	12: sStep		:='Nachladen - Warten bis Schrauberstange oben';
+		tonTimeOver1(IN:= TRUE, PT:= T#200MS);
+		
+		IF tonTimeOver1.Q
+		THEN
+			bSchrAuswurf	:= FALSE;
+			nStep 			:= 10;
+		END_IF	
+
+	/////////////////////////////////////////
+	// Schrauben Schubkastenschiene			
+	/////////////////////////////////////////
+	20: sStep		:='SetzenStart';
+
+		IF IQ_fbObjSchlauch.I_bSchrauberBelegt
+			AND (I_bTaktStart OR I_bTaktStartHalb)
+			AND I_bTaktFrg
+			AND NOT I_bQuittFehler
+			OR bSchraubtest
+		THEN
+			tonTimeOver1(IN:=FALSE);
+			nStep := 30;
+		END_IF
+
+	/////////////////////////////////////////
+	30: sStep		:='Schraubhub_vor';
+	
+		tonTimeOver1(IN:=TRUE,PT:=I_stParam.tParam_ZeitdZustellhubSchr);
+		bSchraubHub		:= TRUE;
+
+		IF I_bTaktFrg
+			AND (tonTimeOver1.Q
+				OR I_bZustellZylAusgef)
+		THEN
+			tonTimeOver1(IN:=FALSE);
+			tonTimeOutSchrauber(IN:=FALSE);
+			nStep := 40;
+		END_IF
+
+	/////////////////////////////////////////
+	40:sStep		:='Auswerfhub_vor';
+	
+		tonTimeOver1(IN:=TRUE,PT:=I_stParam.tParam_ZeitdSchraubhubSchr);
+		tonTimeOutSchrauber(IN:=TRUE,PT:=I_stParam.tParam_ZeitdSchraubhubSchr+T#2S);
+		nTiefeBeimAufsetzen :=	fSchraubTiefeIst;
+		bSchrAuswurf	:= TRUE;
+
+		IF F_Inbetween(
+					I_fActualValue := nTiefeBeimAufsetzen,
+					I_fMinimalValue := 10 - 5,	//Tiefe beim Ausetzen auf die Seite, vor dem Schrauben
+					I_fMaximalValue := 10 + 5)	
+		THEN
+			bTiefeBeimAufsetzenOK:= TRUE;
+		END_IF
+
+		IF tonTimeOver1.Q
+		AND I_bTaktFrg
+		AND NOT bSchraubtest
+		AND F_Inbetween(
+								I_fActualValue 	:= fSchraubTiefeIst,
+								I_fMinimalValue 	:= I_stParam.fParam_Sollschraubtiefe - 100,
+								I_fMaximalValue 	:= I_stParam.fParam_Sollschraubtiefe)
+		THEN
+			tonTimeOver1(IN:=FALSE);
+			bSchraubHub												:= FALSE;
+			bSchrAuswurf											:= FALSE;
+			arrNcAchsen[I_nAchsId].stGrdfkt.bIstw_setz  	:= FALSE;
+			IQ_fbObjSchlauch.I_bSchrauberBelegt 			:= FALSE;
+			nFehlerZaehler											:= nFehlerZaehler + 1;
+			nStep 													:= -40;			// Schraube fehlt 
+
+		ELSIF tonTimeOver1.Q
+		AND I_bTaktFrg
+		AND arrNcAchsen[I_nAchsId].stGrdfkt.bIstw_gesetz
+		AND arrNcAchsen[I_nAchsId].stAuftrg.bPTP_PosiFrg
+		AND ((fSchraubTiefeIst
+				<= 15)(*den Schrauber erst starten, wenn er durch das Mundstück hindurch ist*)(*Wieder rausgenommen, da es hin und wieder zu Störungen führte da das bit nicht durch das Mundstück hindurch kommt*)
+				OR tonTimeOutSchrauber.Q)
+		THEN
+			IF tonTimeOutSchrauber.Q 
+			THEN
+				nAnzahlSchraubspitzenKlemmer := nAnzahlSchraubspitzenKlemmer + 1;
+			END_IF
+				tonTimeOutSchrauber(IN:=FALSE);
+				tonTimeOver1(IN:=FALSE);
+				arrNcAchsen[I_nAchsId].stGrdfkt.bIstw_setz	:= FALSE;
+				nStep 											:= 45;
+		END_IF
+(*===============================================================================================================================*)
+(*	Neuer Schrauberablauf abgekapselt in einem eigenen Baustein *)
+(*===============================================================================================================================*)
+   45:sStep		:=fbSKSSchraubNob.Q_sState;
+	
+   		(*==========================================================================================================================*)
+   		(* Achsanschaltung *)
+		(*==========================================================================================================================*)
+   		arrNcAchsen[I_nAchsId].stEinAusG.Q_nSignalsteuerwort.1 			:=	stSchrauberAchsStruc_InOut.NC_Axis_OUT_bSteuerwortBit1;
+		arrNcAchsen[I_nAchsId].stEinAusG.Q_nSignalsteuerwort.2			:=	stSchrauberAchsStruc_InOut.NC_Axis_OUT_bSteuerwortBit2;											
+		arrNcAchsen[I_nAchsId].stGrdfkt.bIstw_setz						:=	stSchrauberAchsStruc_InOut.NC_Axis_OUT_bIstwertSetzen;
+		arrStartAusf[I_nAchsId].I_bAchseZurArbP							:=	stSchrauberAchsStruc_InOut.NC_Axis_OUT_bAchsePosStarten;
+		arrStartAusf[I_nAchsId].I_bAchseStopPos							:=	stSchrauberAchsStruc_InOut.NC_Axis_OUT_bAchsePosStoppen;
+		arrNcAchsen[I_nAchsId].stGrdfkt.fIstSetzwert					:=	stSchrauberAchsStruc_InOut.NC_Axis_OUT_nPosIstwertSetzen;
+		arrNcAchsen[I_nAchsId].stAuftrg.fPTP_Geschw						:=	stSchrauberAchsStruc_InOut.NC_Axis_OUT_nPTPVelo;
+		arrNcAchsen[I_nAchsId].stAuftrg.ePTP_BuffMode					:=	stSchrauberAchsStruc_InOut.NC_Axis_OUT_PTPBuffMode	;
+		
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_bDCStatuswort13			:=	arrNcAchsen[I_nAchsId].stEinAusG.I_nDCStatusword.13;
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_bStatuswortBit0			:=	arrNcAchsen[I_nAchsId].stEinAusG.I_nSignalstatuswort.0;
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_bIstWertgesetzt			:=	arrNcAchsen[I_nAchsId].stGrdfkt.bIstw_gesetz;
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_bPTPPosiFreig				:=	arrNcAchsen[I_nAchsId].stAuftrg.bPTP_PosiFrg;
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_bNcFehler					:=	arrNcAchsen[I_nAchsId].bNcFehler;
+		
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_nActPos					:=	arrNcAchsen[I_nAchsId].fPosIstwert;
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_nActVelo					:=	arrNcAchsen[I_nAchsId].fVeloIstwert ;
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_nParamEilgeschw			:=	arrNcAchsen[I_nAchsId].stParam.fEilgGeschw;
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_bFaehrtPos				:=	arrNcAchsen[I_nAchsId].stStatus.bFaehrtPos;
+		
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_bInPos					:=	arrStartAusf[I_nAchsId].Q_bAchseGestPos
+																			OR arrStartAusf[I_nAchsId].Q_bAchseInPos;
+												
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_bInStillstand				:=	arrNcAchsen[I_nAchsId].stStatus.bInStillst;
+		stSchrauberAchsStruc_InOut.NC_Axis_IN_nActTorque				:=	ABS(arrNcAchsen[I_nAchsId].stEinAusG.I_nDrehmomentIstwert);
+   		
+		(* Aufruf des neuen Ablaufs *)
+   		fbSKSSchraubNob(
+			I_bStart:= 							I_bTaktStart,	 
+			I_bFreigabe:= 						I_bTaktFrg, 
+			I_bReset:= 							bReset, 
+			I_bQuittFehler:= 					I_bQuittFehler, 
+			I_lrActPosTiefe:= 					fSchraubTiefeIst, 
+			I_stSchraubParam:= 					I_stSchraubParam, 
+			Q_sState=> , 
+			Q_bBusy=> , 
+			Q_bDone=> , 
+			Q_bError=> , 
+			Q_nErrorId=> , 
+			Q_bSchrHalt=> 						Q_bSchrHalt, 
+			Q_bAxisReset=> 						bAchsreset, 
+			Q_nTorque=> 						Q_nTorque, 
+			IQ_SchrauberAchsStruc_InOut:= 		stSchrauberAchsStruc_InOut);
+   				
+   		IF	fbSKSSchraubNob.Q_bError 
+		THEN
+			nFehlerSchrittMerker :=	-45;
+		END_IF
+		
+		IF (fbSKSSchraubNob.Q_bDone
+			AND NOT fbSKSSchraubNob.Q_bBusy)
+			OR (fbSKSSchraubNob.Q_bError 
+				AND fbSKSSchraubNob.Q_nErrorId <> 0) 
+		THEN
+			nStep := 80;
+		END_IF
+(*===============================================================================================================================*)		
+(*	RESET neuer Ablauf	*)
+(*===============================================================================================================================*)
+   46:sStep		:=fbSKSSchraubNob.Q_sState;
+			
+   		(* Schrauberablauf reset ausführen *)
+		fbSKSSchraubNob(
+			I_bStart:= 						FALSE, 
+			I_bFreigabe:= 					FALSE, 
+			I_bReset:= 						TRUE, 	
+			I_bQuittFehler:= 				TRUE, 
+			Q_bAxisReset=> 					bAchsreset, 
+			Q_nTorque=> 					Q_nTorque, 
+			IQ_SchrauberAchsStruc_InOut:= 	stSchrauberAchsStruc_InOut);
+			
+		IF NOT fbSKSSchraubNob.Q_bBusy
+			AND NOT fbSKSSchraubNob.Q_bDone
+		THEN
+			nStep := 100;
+		END_IF
+				
+(*===============================================================================================================================*)
+	/////////////////////////////////////////
+	80:sStep		:='Spindelhub heben um ein Seitenhochziehen zu vermeiden';
+		
+		(* Wenn Motor Steht *)
+   		IQ_fbObjSchlauch.I_bSchrauberBelegt 			:= FALSE;
+		
+		tonTimeOver1(IN:=TRUE,PT:=I_stParam.tParam_ZeitdAuswurfSchr);
+		bSchrAuswurf												:= FALSE;
+		
+		IF F_Inbetween(
+						I_fActualValue := fSchraubTiefeIst,
+						I_fMinimalValue := 80 - 10,
+						I_fMaximalValue := 80 + 10 )
+		THEN
+			tonTimeOver1(IN:=FALSE);
+			nStep := 85;
+		ELSIF tonTimeOver1.Q 
+		THEN
+			tonTimeOver1(IN:=FALSE);
+			bSchraubHub	:= FALSE;
+		  	nStep := 90;
+			nFehlerSchrittMerker							:= -80;
+		END_IF
+
+	/////////////////////////////////////////
+	85:sStep		:='Scharaubhub heben';
+	
+		bSchraubHub	:= FALSE;
+		nStep 		:= 90;
+						
+	/////////////////////////////////////////
+	90:sStep	:='Zylinder_Zur_Grundstellung';
+      
+		IF I_bGrdstlgSchrEinh
+		 AND I_bTaktFrg
+		THEN
+			arrNcAchsen[I_nAchsId].stEinAusG.Q_nSignalsteuerwort.2	:= TRUE;		// Antriebsgeführtes Referenzieren 
+			bAchsreset										:= TRUE;
+			nStep := 95;
+		END_IF
+
+	/////////////////////////////////////////
+	95:sStep	:='Antriebsgeführtes Referenzieren';
+	
+   	bAchsreset										:= FALSE;
+   
+		IF arrNcAchsen[I_nAchsId].stEinAusG.I_nSignalstatuswort.0
+			OR I_nMotorHersteller = 1
+		THEN
+			arrNcAchsen[I_nAchsId].stEinAusG.Q_nSignalsteuerwort.2	:= FALSE;		// Antriebsgeführtes Referenzieren 
+
+			IF nFehlerSchrittMerker <> 0
+			THEN
+				nFehlerZaehler			:= nFehlerZaehler + 1;
+				nStep 					:= nFehlerSchrittMerker;
+				nFehlerSchrittMerker	:= 0;
+			ELSE
+				nStep := 100;
+			END_IF
+		END_IF
+
+	/////////////////////////////////////////
+	100:sStep		:='Setzen Ende';
+		
+		sStep :=fbSKSSchraubNob.Q_sState;
+			
+		bSchraubtest := FALSE;
+		
+		IF NOT I_bTaktStart
+			AND NOT I_bTaktStartHalb
+		THEN			
+			
+			Q_nTorque	 										:= 300;
+			bAutoquitAktiv 									:= FALSE;
+			bSchraubtest										:= FALSE;
+			arrNcAchsen[I_nAchsId].stEinAusG.Q_nSignalsteuerwort.1		:= FALSE;
+			arrStartAusf[I_nAchsId].I_bAchseZurArbP	:= FALSE;			
+			nStep		:= 10;
+		END_IF
+
+	/////////////////////////////////////////
+	// Auswerfen										
+	/////////////////////////////////////////
+	200:sStep		:='AuswerfenStart';
+	
+		tonTimeOver1(IN:=TRUE,PT:=T#10S);
+		IF I_bTaktFrg
+		AND I_bFreigabeAuswerfen
+			 OR tonTimeOver1.Q
+			THEN
+			tonTimeOver1(IN:=FALSE);
+			nStep := 205;
+		END_IF
+
+	/////////////////////////////////////////
+	205: sStep		:='Schraubhub_vor';
+	
+		tonTimeOver1(IN:=TRUE,PT:=I_stParam.tParam_ZeitdZustellhubSchr);
+		bSchraubHub		:= TRUE;
+
+		IF I_bTaktFrg
+			AND (tonTimeOver1.Q
+				OR I_bZustellZylAusgef)
+		THEN
+			tonTimeOver1(IN:=FALSE);
+			nStep := 210;
+		END_IF
+
+	/////////////////////////////////////////
+	210:sStep		:='Auswerfhub_zur';
+	
+		tonTimeOver1(IN:=TRUE,PT:=I_stParam.tParam_ZeitdAuswurfSchr);
+
+		bSchrAuswurf	:= TRUE;
+
+		IF F_Inbetween(
+						I_fActualValue 	:= fSchraubTiefeIst,
+						I_fMinimalValue 	:= I_fSchraubTiefeAuswurf - 100,
+						I_fMaximalValue 	:= I_fSchraubTiefeAuswurf + 1 )
+		THEN
+			nStep := 230;
+		ELSIF tonTimeOver1.Q THEN
+			tonTimeOver1(IN:=FALSE,PT:=T#500MS);
+			bSchrAuswurf	:= FALSE;
+			nStep := 215;
+		END_IF
+
+	/////////////////////////////////////////
+	215:
+	
+		tonTimeOver1(IN:=TRUE,PT:=T#100MS);
+		IF tonTimeOver1.Q THEN
+			tonTimeOver1(IN:=FALSE);
+			nStep := 220;
+		END_IF
+
+	/////////////////////////////////////////
+	220:sStep		:='Auswerfhub_zur';
+
+		tonTimeOver1(IN:=TRUE,PT:=I_stParam.tParam_ZeitdAuswurfSchr);
+		bSchrAuswurf	:= TRUE;
+
+		IF F_Inbetween(
+						I_fActualValue := fSchraubTiefeIst,
+						I_fMinimalValue := I_fSchraubTiefeAuswurf - 100,
+						I_fMaximalValue := I_fSchraubTiefeAuswurf + 1 )
+		THEN
+			nStep := 230;
+			tonTimeOver1(IN:=FALSE,PT:=T#500MS);
+		ELSIF tonTimeOver1.Q THEN
+			bSchrAuswurf	:= FALSE;
+			bSchraubHub		:= FALSE;
+			nStep := -210;
+			tonTimeOver1(IN:=FALSE,PT:=T#500MS);
+		END_IF
+
+	/////////////////////////////////////////
+	230:sStep		:='AuswerfenAktiv';
+	
+		IF I_bTaktFrg THEN
+			nStep := 240;
+		END_IF
+
+	/////////////////////////////////////////
+	240:sStep		:='Auswerfhub_vor';
+	
+		tonTimeOver1(IN:=TRUE,PT:=T#1000MS);
+		bSchrAuswurf	:= FALSE;
+		bSchraubHub		:= FALSE;
+
+		IF NOT F_Inbetween(
+						I_fActualValue := fSchraubTiefeIst,
+						I_fMinimalValue := I_fSchraubTiefeAuswurf - 100,
+						I_fMaximalValue := I_fSchraubTiefeAuswurf + 1 )
+			AND NOT I_bZustellZylAusgef
+		THEN
+			nStep := 250;
+			tonTimeOver1(IN:=FALSE,PT:=T#1000MS);
+		ELSIF tonTimeOver1.Q THEN
+			bSchrAuswurf	:= FALSE;
+			bSchraubHub		:= FALSE;
+			nStep := -210;
+			tonTimeOver1(IN:=FALSE,PT:=T#1000MS);
+		END_IF
+
+	/////////////////////////////////////////
+	250:sStep		:='AuswerfenEnde';
+	
+		Q_nErrorId	:= 0;
+		IF I_bTaktFrg AND NOT IQ_fbObjSchlauch.I_bTasteVereinzelung THEN
+			IQ_fbObjSchlauch.I_bSchrauberBelegt := FALSE;
+			bAutoquitAktiv := FALSE;
+			nStep := 10;
+		END_IF
+
+	/////////////////////////////////////////
+	// ERROR 
+	/////////////////////////////////////////
+	-40:sStep		:='Schraube fehlt';
+	
+		Q_nErrorId	:= -40;
+		IF I_bQuittFehler
+			AND I_bGrdstlgSchrEinh
+			THEN
+			bAutoquitAktiv := tonAutoquit.Q;
+			bSchrAuswurfStart := TRUE;
+			nStep := 100;
+		END_IF
+
+	/////////////////////////////////////////
+	-45:(* Fehler aus dem Neuen Ablauf auslesen und übergeben *)
+   		fbSKSSchraubNob(
+			Q_sState=> 							sStep, 
+			Q_nErrorId=> 						Q_nErrorId, 
+			IQ_SchrauberAchsStruc_InOut:= 		stSchrauberAchsStruc_InOut);
+		
+		IF I_bQuittFehler
+			AND I_bGrdstlgSchrEinh
+		THEN
+			bAutoquitAktiv := tonAutoquit.Q;
+			bSchrAuswurfStart := TRUE;
+			nStep := 46;
+		END_IF
+
+	/////////////////////////////////////////
+	-80:sStep		:='Fehler beim heben/senken der Schrauberstange';
+	
+		Q_nErrorId	:= -80;
+		IF I_bQuittFehler
+			AND I_bGrdstlgSchrEinh
+			THEN
+			bAutoquitAktiv := tonAutoquit.Q;
+			bSchrAuswurfStart := TRUE;
+			nStep := 100;
+		END_IF
+		
+	/////////////////////////////////////////
+	-210:sStep		:='Fehler Auswerfen';
+	
+		Q_nErrorId	:= -210;
+		IF I_bQuittFehler
+			THEN
+			bAutoquitAktiv := tonAutoquit.Q;
+			bSchrAuswurfStart := TRUE;
+			nStep := 240;
+		END_IF
+
+	END_CASE
+ELSE
+
+	nStep := 0;
+
+END_IF
+
+	/////////////////////////////////////////
+	IF I_bGrundstellung THEN
+		nStep := 0;
+	END_IF
+	
+	/////////////////////////////////////////
+	// Autoquit 
+	tonAutoquit(IN:=(Q_bError AND I_tAutoQuit > T#0MS),PT:=I_tAutoQuit);
+
+	/////////////////////////////////////////
+	//
+	Q_sPosZustand := F_PosZustand(I_sString:=I_sPosBeschreibung, I_nStep:=nStep, I_sStep:=sStep);
+
+
+	/////////////////////////////////////////
+	// Ist-Schraubtiefe 
+	fSchraubTiefeIst:= arrNcAchsen[I_nEncId].fPosIstwert;
+
+	/////////////////////////////////////////
+	// Mittelwert des Drehmoments bilden, damit nicht ein kurzer Ausschlag gleich zuer Abschaltung führen könnte 
+	IF nStep >= 65
+		AND nStep <= 70
+	THEN
+		arrDrehmomentIst[0]:= ABS(arrNcAchsen[I_nAchsId].stEinAusG.I_nDrehmomentIstwert);
+		FOR idx:= 10 TO 1 BY -1 DO
+			arrDrehmomentIst[idx]:= arrDrehmomentIst[idx-1];
+		END_FOR
+			fDrehmomentIstMittel:=	(	arrDrehmomentIst[1]
+											+	arrDrehmomentIst[2]
+											+	arrDrehmomentIst[3]
+											+	arrDrehmomentIst[4]
+											+	arrDrehmomentIst[5]
+											+	arrDrehmomentIst[6]
+											+	arrDrehmomentIst[7]
+											+	arrDrehmomentIst[8]
+											+	arrDrehmomentIst[9]
+											+	arrDrehmomentIst[10]	)
+											/	10;
+	ELSE
+		fDrehmomentIstMittel := 0;
+	END_IF
+
+	/////////////////////////////////////////
+	//Schraubzeit für eigene Diagnose speichern
+	tonSchraubtakt(
+				IN:= nStep = 60 OR nStep = 160 OR nStep = 65,
+				PT:= T#100s);
+	IF nStep = 60
+	OR nStep = 160
+	OR nStep = 65
+	THEN
+		timeSchraubtakt:= tonSchraubtakt.ET;
+	END_IF
+
+	/////////////////////////////////////////
+	//Informationen zur letzten Isttiefe, Schraubfehlernummer und anstehende Moment, 
+	//werden zur eigenen, internen Diagnose in einem Array gespreichert 
+	ftrigStep70(CLK:= nStep = 70);
+	rtrigStep70(CLK:= nStep = 70
+							//AND nFehlerSchrittMerker<>0
+							);
+
+	IF rtrigStep70.Q
+	THEN
+		FOR idx:=100 TO 1 BY -1 DO
+			arrLetzteTiefe[idx]			:= arrLetzteTiefe[idx-1];
+			arrLetzteFehler[idx]			:= arrLetzteFehler[idx-1];
+			arrLetzteMomente[idx]		:= arrLetzteMomente[idx-1];
+			arrLetzteSchraubzeit[idx]	:= arrLetzteSchraubzeit[idx-1];
+		END_FOR
+		arrLetzteTiefe[0]			:= fSchraubTiefeIst;
+		arrLetzteFehler[0]		:=	nFehlerSchrittMerker;
+		arrLetzteMomente[0]		:= fDrehmomentIstMittel;
+		arrLetzteSchraubzeit[0]	:= timeSchraubtakt;
+	END_IF
+
+	/////////////////////////////////////////
+	//Verzögerung des Achssignals "Stillstand" 
+	tonVerzStillstand(
+				IN:= arrNcAchsen[I_nAchsId].stStatus.bInStillst,
+				PT:= T#10MS);
+	
+	//Timer
+	tonDelay1(IN:=nStep= nOldStep,PT:=T#1D);
+	nOldStep:= nStep;		
+	
+	//History	
+	fbStepHistory(
+		I_nStep := nStep );
+				]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="e_Error" Id="{e17fefbf-0393-4526-b846-7a40c3c666c2}">
+      <Implementation>
+        <ST><![CDATA[	(* Fehler überarbeitet *)
+
+	(* Fehler Nachladen, Schraube fehlt *)
+	objError_Schrauber.I_fbFehlerNachladen(
+		I_bAktiv := (nStep = -40) 
+						);
+	(* Langsame Geschwindigkeit wird nicht erreicht *)
+	objError_Schrauber.I_fbFehlerLangsameGeschwindigkeit(
+		I_bAktiv := (nStep = -45) 
+						);
+	(* Schraubtiefe für Solldrehzahl wird nicht erreicht *)
+	objError_Schrauber.I_fbFehlerTiefeSolldrehzahl(
+		I_bAktiv := (nStep = -50) 
+						);
+	(* Tiefe nicht erreicht *)
+	objError_Schrauber.I_fbFehler_Tiefe(
+		I_bAktiv := (nStep = -60)
+						);						
+	(* Tiefe überschritten *)
+	objError_Schrauber.I_fbFehler_TiefeUeberschritten(
+		I_bAktiv := (nStep = -61)
+						);
+	(* Drehmoment nicht erreicht*)
+	objError_Schrauber.I_fbFehler_Sollmoment(
+		I_bAktiv := (nStep = -65)
+						);
+	(* Fehler beim heben/senken der Schrauberstange*)
+	objError_Schrauber.I_fbFehler_Schrauberstange(
+		I_bAktiv := (nStep = -80)
+						);
+	(* Fehler beim Auswerfen *)
+	objError_Schrauber.I_fbFehlerAuswurf(
+		I_bAktiv := (nStep = -210)
+						);
+	(* Fehler allgemein *)
+	Q_bError	:= nStep<0
+					AND NOT I_bSchrauberLogOn;
+	
+	
+	IQ_stMeldung.bMeldFehlNachladen  					:= objError_Schrauber.I_fbFehlerNachladen.I_bAktiv
+																		AND NOT I_bSchrauberLogOn;
+	IQ_stMeldung.bMeldFehlLangsameGeschwindigkeit	:= objError_Schrauber.I_fbFehlerLangsameGeschwindigkeit.I_bAktiv
+																		AND NOT I_bSchrauberLogOn;
+	IQ_stMeldung.bMeldFehlTiefeSolldrehzahl			:= objError_Schrauber.I_fbFehlerTiefeSolldrehzahl.I_bAktiv
+																		AND NOT I_bSchrauberLogOn;
+	IQ_stMeldung.bMeldFehlSollTiefe						:= objError_Schrauber.I_fbFehler_Tiefe.I_bAktiv
+																		AND NOT I_bSchrauberLogOn;
+	IQ_stMeldung.bMeldFehlSollTiefeUebers				:= objError_Schrauber.I_fbFehler_TiefeUeberschritten.I_bAktiv
+																		AND NOT I_bSchrauberLogOn;
+	IQ_stMeldung.bMeldFehlSollDrehmom					:= objError_Schrauber.I_fbFehler_Sollmoment.I_bAktiv
+																		AND NOT I_bSchrauberLogOn;
+	IQ_stMeldung.bMeldFehlSchrauberstange				:= objError_Schrauber.I_fbFehler_Schrauberstange.I_bAktiv
+																		AND NOT I_bSchrauberLogOn;
+	IQ_stMeldung.bMeldFehlAuswerfen						:= objError_Schrauber.I_fbFehlerAuswurf.I_bAktiv
+																		AND NOT I_bSchrauberLogOn;
+
+	IQ_stMeldung.sName 		:= I_sPosBeschreibung;
+	IQ_stMeldung.SourceName := I_sSourceBeschreibung;
+	]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="l_Log" Id="{ea6b6e5f-497b-491e-88cf-4c86c266aba5}">
+      <Implementation>
+        <ST><![CDATA[	//Stückzähler
+	rtrigStueckzaehler(clk:= Q_bDone);
+	IF rtrigStueckzaehler.Q
+	THEN
+		nStueckzaehler := nStueckzaehler + 1;
+	END_IF
+		
+	//Log
+	rtrigSchrauberfehler(clk:= nStep < 0
+										AND I_stParam.bLogAnwahl);
+   
+	fbLogToFile(
+		I_bStart				:= rtrigSchrauberfehler.Q,
+		I_sDateipfad		:= I_sDateipfad,
+		I_sDateiname		:= I_sPosBeschreibung,
+		I_sUeberschrift	:= 'Timestamp;Anzahl;Schraubzeit;Drehmoment;Schraubtiefe;Barcode;Fehlermeldung;$R',
+		
+		I_bFehler1			:= objError_Schrauber.I_fbFehler_Schrauberstange.I_bAktiv,
+		I_bFehler2			:= objError_Schrauber.I_fbFehler_Sollmoment.I_bAktiv,
+		I_bFehler3			:= objError_Schrauber.I_fbFehler_Tiefe.I_bAktiv,
+		I_bFehler4			:= objError_Schrauber.I_fbFehler_TiefeUeberschritten.I_bAktiv,
+		I_bFehler5			:= objError_Schrauber.I_fbFehlerAuswurf.I_bAktiv,
+		I_bFehler6			:= objError_Schrauber.I_fbFehlerLangsameGeschwindigkeit.I_bAktiv,
+		I_bFehler7			:= objError_Schrauber.I_fbFehlerNachladen.I_bAktiv,
+		I_bFehler8			:= objError_Schrauber.I_fbFehlerTiefeSolldrehzahl.I_bAktiv,
+	               	   
+		I_sFehler1			:= 'Fehler beim heben/senken der Schrauberstange',
+		I_sFehler2			:= 'Fehler - Drehmoment wird nicht erreicht',
+		I_sFehler3			:= 'Fehler - Tiefe wird nicht erreicht',
+		I_sFehler4			:= 'Fehler - Tiefe ueberschritten',
+		I_sFehler5			:= 'Fehler - Auswerfen',
+		I_sFehler6			:= 'Fehler - Langsame Geschwindigkeit wird nicht erreicht',
+		I_sFehler7			:= 'Fehler - Schraube fehlt',
+		I_sFehler8			:= 'Fehler - Schraubtiefe für Solldrehzahl wird nicht erreicht',
+   
+		I_sBarcode			:= '',
+   
+		I_nAnzahlVerschraubungen := nStueckzaehler,
+   
+		I_tSchraubzeit		:= arrLetzteSchraubzeit[0],
+		I_fDrehmoment		:= arrLetzteMomente[0],
+		I_fSchraubtiefe	:= arrLetzteTiefe[0],
+   	);		
+   
+	IF Q_bDone
+	THEN
+		fbLogToFile( I_bStart:= FALSE);
+	END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="o_Output" Id="{869bc855-87b6-4b05-b23d-555fb3a4dda3}">
+      <Implementation>
+        <ST><![CDATA[	IQ_fbObjSchlauch.I_bSotiertopfEin :=
+								I_bSchutzbereichOK AND NOT bReset
+								AND (nStep = 11 OR nStep = 21);
+
+	IQ_fbObjSchlauch.I_bFrgNachladen 	:=
+								I_bSchutzbereichOK AND NOT bReset
+								AND (nStep = 11);
+
+	Q_bSchraubHub	:=		I_bSchutzbereichOK AND NOT bReset
+								AND (bSchraubHub);
+
+	Q_bSchrAuswurf	:=		I_bSchutzbereichOK AND NOT bReset
+								AND (bSchrAuswurf);
+
+	Q_bBusy			:= 	nStep <> 10 ;
+
+	Q_bDone			:= 	nStep = 100 ;
+
+	(*Q_bSchrHalt		:=		nStep = 70;	*)		
+
+	Q_bAxisReset	:=		bAchsreset ;
+
+	Q_bTuerFreigabe:=
+								nStep <= 10 ;
+							
+	Q_nStep 			:= 	nStep;
+	Q_strStep		:= 	Q_strStep;
+	
+	Q_sStatus		:= Concat(INT_TO_STRING(nStep),CONCAT( ' - ', sStep));	
+
+	(* ModuloBetrArt *)
+	Q_bModuloBetrArt	:= bModuloBetrArt;
+
+]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="FB_Schrauber_PnP_4">
+      <LineId Id="220" Count="5" />
+      <LineId Id="413" Count="0" />
+      <LineId Id="226" Count="1" />
+      <LineId Id="241" Count="1" />
+      <LineId Id="229" Count="1" />
+      <LineId Id="232" Count="2" />
+    </LineIds>
+    <LineIds Name="FB_Schrauber_PnP_4.a_Ablauf">
+      <LineId Id="2" Count="1" />
+      <LineId Id="708" Count="0" />
+      <LineId Id="4" Count="0" />
+      <LineId Id="1084" Count="0" />
+      <LineId Id="6" Count="12" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="1083" Count="0" />
+      <LineId Id="1366" Count="7" />
+      <LineId Id="1365" Count="0" />
+      <LineId Id="1374" Count="0" />
+      <LineId Id="23" Count="40" />
+      <LineId Id="1225" Count="14" />
+      <LineId Id="66" Count="46" />
+      <LineId Id="115" Count="0" />
+      <LineId Id="117" Count="10" />
+      <LineId Id="709" Count="0" />
+      <LineId Id="128" Count="0" />
+      <LineId Id="131" Count="7" />
+      <LineId Id="710" Count="0" />
+      <LineId Id="140" Count="0" />
+      <LineId Id="739" Count="0" />
+      <LineId Id="142" Count="0" />
+      <LineId Id="144" Count="10" />
+      <LineId Id="713" Count="0" />
+      <LineId Id="155" Count="0" />
+      <LineId Id="1085" Count="0" />
+      <LineId Id="158" Count="11" />
+      <LineId Id="714" Count="0" />
+      <LineId Id="170" Count="0" />
+      <LineId Id="1086" Count="0" />
+      <LineId Id="173" Count="1" />
+      <LineId Id="177" Count="0" />
+      <LineId Id="804" Count="1" />
+      <LineId Id="178" Count="32" />
+      <LineId Id="801" Count="0" />
+      <LineId Id="211" Count="7" />
+      <LineId Id="777" Count="0" />
+      <LineId Id="1240" Count="0" />
+      <LineId Id="778" Count="0" />
+      <LineId Id="332" Count="0" />
+      <LineId Id="1291" Count="2" />
+      <LineId Id="1265" Count="1" />
+      <LineId Id="1268" Count="6" />
+      <LineId Id="1276" Count="14" />
+      <LineId Id="1263" Count="1" />
+      <LineId Id="1398" Count="0" />
+      <LineId Id="1248" Count="3" />
+      <LineId Id="1294" Count="0" />
+      <LineId Id="1253" Count="9" />
+      <LineId Id="1247" Count="0" />
+      <LineId Id="1245" Count="0" />
+      <LineId Id="1408" Count="0" />
+      <LineId Id="1410" Count="1" />
+      <LineId Id="1246" Count="0" />
+      <LineId Id="1413" Count="0" />
+      <LineId Id="1301" Count="1" />
+      <LineId Id="1414" Count="1" />
+      <LineId Id="1303" Count="0" />
+      <LineId Id="1309" Count="0" />
+      <LineId Id="1295" Count="0" />
+      <LineId Id="1379" Count="0" />
+      <LineId Id="1376" Count="0" />
+      <LineId Id="1380" Count="0" />
+      <LineId Id="1241" Count="0" />
+      <LineId Id="1378" Count="0" />
+      <LineId Id="1382" Count="7" />
+      <LineId Id="1381" Count="0" />
+      <LineId Id="1391" Count="2" />
+      <LineId Id="1395" Count="1" />
+      <LineId Id="1394" Count="0" />
+      <LineId Id="1390" Count="0" />
+      <LineId Id="1243" Count="0" />
+      <LineId Id="910" Count="0" />
+      <LineId Id="852" Count="0" />
+      <LineId Id="1092" Count="0" />
+      <LineId Id="1298" Count="2" />
+      <LineId Id="854" Count="0" />
+      <LineId Id="914" Count="0" />
+      <LineId Id="858" Count="1" />
+      <LineId Id="861" Count="6" />
+      <LineId Id="911" Count="0" />
+      <LineId Id="868" Count="0" />
+      <LineId Id="1224" Count="0" />
+      <LineId Id="869" Count="3" />
+      <LineId Id="912" Count="0" />
+      <LineId Id="874" Count="0" />
+      <LineId Id="1093" Count="0" />
+      <LineId Id="875" Count="2" />
+      <LineId Id="1034" Count="1" />
+      <LineId Id="1037" Count="1" />
+      <LineId Id="1040" Count="2" />
+      <LineId Id="1064" Count="0" />
+      <LineId Id="1046" Count="0" />
+      <LineId Id="1044" Count="1" />
+      <LineId Id="735" Count="0" />
+      <LineId Id="405" Count="0" />
+      <LineId Id="1094" Count="0" />
+      <LineId Id="1048" Count="0" />
+      <LineId Id="1066" Count="0" />
+      <LineId Id="1049" Count="0" />
+      <LineId Id="1082" Count="0" />
+      <LineId Id="1050" Count="1" />
+      <LineId Id="1053" Count="0" />
+      <LineId Id="1052" Count="0" />
+      <LineId Id="411" Count="8" />
+      <LineId Id="736" Count="0" />
+      <LineId Id="420" Count="0" />
+      <LineId Id="1095" Count="0" />
+      <LineId Id="1313" Count="0" />
+      <LineId Id="1323" Count="0" />
+      <LineId Id="422" Count="0" />
+      <LineId Id="1397" Count="0" />
+      <LineId Id="423" Count="2" />
+      <LineId Id="1354" Count="0" />
+      <LineId Id="426" Count="7" />
+      <LineId Id="1110" Count="113" />
+      <LineId Id="520" Count="2" />
+      <LineId Id="747" Count="0" />
+      <LineId Id="524" Count="0" />
+      <LineId Id="1102" Count="0" />
+      <LineId Id="526" Count="7" />
+      <LineId Id="826" Count="2" />
+      <LineId Id="1424" Count="0" />
+      <LineId Id="1428" Count="0" />
+      <LineId Id="1432" Count="0" />
+      <LineId Id="1416" Count="0" />
+      <LineId Id="1310" Count="0" />
+      <LineId Id="831" Count="6" />
+      <LineId Id="920" Count="2" />
+      <LineId Id="1108" Count="0" />
+      <LineId Id="924" Count="7" />
+      <LineId Id="592" Count="0" />
+      <LineId Id="752" Count="0" />
+      <LineId Id="593" Count="0" />
+      <LineId Id="1109" Count="0" />
+      <LineId Id="595" Count="14" />
+      <LineId Id="767" Count="0" />
+      <LineId Id="611" Count="2" />
+      <LineId Id="768" Count="0" />
+      <LineId Id="616" Count="0" />
+      <LineId Id="769" Count="0" />
+      <LineId Id="617" Count="1" />
+      <LineId Id="770" Count="1" />
+      <LineId Id="620" Count="0" />
+      <LineId Id="657" Count="0" />
+      <LineId Id="1055" Count="0" />
+      <LineId Id="1058" Count="1" />
+      <LineId Id="1056" Count="1" />
+      <LineId Id="772" Count="0" />
+      <LineId Id="658" Count="1" />
+      <LineId Id="983" Count="0" />
+      <LineId Id="959" Count="0" />
+      <LineId Id="963" Count="14" />
+      <LineId Id="961" Count="0" />
+      <LineId Id="978" Count="0" />
+      <LineId Id="960" Count="0" />
+      <LineId Id="674" Count="0" />
+      <LineId Id="773" Count="0" />
+      <LineId Id="675" Count="11" />
+      <LineId Id="774" Count="1" />
+      <LineId Id="981" Count="1" />
+      <LineId Id="688" Count="0" />
+      <LineId Id="944" Count="0" />
+      <LineId Id="689" Count="10" />
+      <LineId Id="979" Count="0" />
+      <LineId Id="701" Count="2" />
+      <LineId Id="776" Count="0" />
+      <LineId Id="1060" Count="3" />
+      <LineId Id="765" Count="0" />
+      <LineId Id="945" Count="0" />
+      <LineId Id="956" Count="0" />
+      <LineId Id="946" Count="0" />
+      <LineId Id="953" Count="1" />
+      <LineId Id="957" Count="0" />
+      <LineId Id="955" Count="0" />
+      <LineId Id="766" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Schrauber_PnP_4.e_Error">
+      <LineId Id="2" Count="5" />
+      <LineId Id="46" Count="7" />
+      <LineId Id="9" Count="3" />
+      <LineId Id="41" Count="3" />
+      <LineId Id="54" Count="7" />
+      <LineId Id="34" Count="5" />
+      <LineId Id="84" Count="0" />
+      <LineId Id="62" Count="1" />
+      <LineId Id="65" Count="0" />
+      <LineId Id="85" Count="0" />
+      <LineId Id="67" Count="0" />
+      <LineId Id="88" Count="0" />
+      <LineId Id="87" Count="0" />
+      <LineId Id="89" Count="0" />
+      <LineId Id="71" Count="0" />
+      <LineId Id="90" Count="0" />
+      <LineId Id="73" Count="0" />
+      <LineId Id="91" Count="0" />
+      <LineId Id="75" Count="0" />
+      <LineId Id="92" Count="0" />
+      <LineId Id="77" Count="0" />
+      <LineId Id="93" Count="0" />
+      <LineId Id="78" Count="0" />
+      <LineId Id="94" Count="0" />
+      <LineId Id="82" Count="0" />
+      <LineId Id="80" Count="0" />
+      <LineId Id="83" Count="0" />
+      <LineId Id="81" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Schrauber_PnP_4.l_Log">
+      <LineId Id="2" Count="4" />
+      <LineId Id="1" Count="0" />
+      <LineId Id="7" Count="0" />
+      <LineId Id="9" Count="8" />
+      <LineId Id="19" Count="4" />
+      <LineId Id="63" Count="0" />
+      <LineId Id="65" Count="0" />
+      <LineId Id="67" Count="1" />
+      <LineId Id="25" Count="4" />
+      <LineId Id="69" Count="3" />
+      <LineId Id="31" Count="5" />
+      <LineId Id="73" Count="1" />
+      <LineId Id="37" Count="0" />
+      <LineId Id="39" Count="3" />
+      <LineId Id="8" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Schrauber_PnP_4.o_Output">
+      <LineId Id="2" Count="19" />
+      <LineId Id="24" Count="6" />
+      <LineId Id="35" Count="1" />
+      <LineId Id="31" Count="3" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

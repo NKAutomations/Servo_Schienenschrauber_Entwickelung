@@ -1,0 +1,230 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="fb_RGB_Button" Id="{afef2fa5-568c-4fd6-aa82-22f6f7dd0909}" SpecialFunc="None">
+    <Declaration><![CDATA[(*======================================================================================================================================*)
+(* fb_RGB_Button: Zur eAnsteuerung eines Einzelnen RGB Tasters  *)
+(*
+Date          	| Version    	| created under        	| Author          	| Remark *)
+(*======================================================================================================================================*)
+(*20/03/2024	| 1.00      		| TC2		  		| N.Kersting       | first release *)
+(*26/07/2024	| 1.01      		| TC2		  		| N.Kersting       | Neuen Demo Eingang für Demomode und neue Demo Farbe *)
+(*======================================================================================================================================*)
+FUNCTION_BLOCK fb_RGB_Button
+VAR_INPUT
+	I_bRGBTest		:BOOL;		(*	Startet den RGB Test	*)
+	I_bInput			:BOOL;		(*	Eingang des Tasters	*)
+	I_bQuery1		:BOOL;		(*	Rückmeldung 1	*)
+	I_bQuery2		:BOOL;		(*	Rückmeldung 2	*)
+
+	I_bDemo			:BOOL;		(*	Demo Mode *)
+
+	I_stColors		:st_RGB_Selection;		(*	Auswahl, welche Farbe bei welchem Zustand ausgewählt werden soll *)
+END_VAR
+VAR_OUTPUT
+	Q_bLED_Red	:BOOL;
+	Q_bLED_Green	:BOOL;
+	Q_bLED_Blue	:BOOL;
+	Q_dwColor		:DWORD;
+	Q_Out			:BOOL;
+END_VAR
+VAR
+	stColor			:stFarbe;
+	COLOR			:enumRGB_Button_Color;
+	iStepTest		:INT;
+	tonStepTest		:TON;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*	*)
+ac_Outputs();
+
+tonStepTest();
+tonStepTest.PT	:= t#200ms;
+
+IF I_bRGBTest
+THEN
+	ac_RGBTest();
+ELSE
+	iStepTest 		:=	 0;
+	tonStepTest.IN 	:=	 FALSE;
+
+	IF	I_bDemo
+	THEN
+		COLOR :=	I_stColors.Demo;
+	ELSE
+		IF	I_bInput
+		THEN
+			COLOR :=	I_stColors.Input_Color;
+		ELSE
+			IF	I_bQuery1
+				AND NOT I_bQuery2
+			THEN
+				COLOR :=	I_stColors.Query1_Color;
+			ELSIF
+				I_bQuery2
+				AND NOT I_bQuery1
+			THEN
+				COLOR :=	I_stColors.Query2_Color;
+			ELSIF
+				I_bQuery1
+				AND  I_bQuery2
+			THEN
+				COLOR :=	I_stColors.Query12_Color;
+			ELSE
+				COLOR :=	Off;
+			END_IF
+		END_IF
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <Action Name="ac_Outputs" Id="{548fee9b-4453-46ea-8ce6-763868bca412}">
+      <Implementation>
+        <ST><![CDATA[(* RGB Farbmischung *)
+
+Q_Out	:=	I_bInput;
+
+CASE	COLOR	OF
+
+Off:		Q_bLED_Red 	:= 	FALSE;
+		Q_bLED_Green	:=	FALSE;
+		Q_bLED_Blue	:=	FALSE;
+
+		Q_dwColor		:=	stColor.Schwarz ;
+
+White:	Q_bLED_Red	 := 	TRUE;
+		Q_bLED_Green	:=	TRUE;
+		Q_bLED_Blue	:=	TRUE;
+
+		Q_dwColor		:=	stColor.Weiss;
+
+Red:	Q_bLED_Red	 := 	TRUE;
+		Q_bLED_Green	:=	FALSE;
+		Q_bLED_Blue	:=	FALSE;
+
+		Q_dwColor		:=	stColor.Rot;
+
+Green:	Q_bLED_Red	 := 	FALSE;
+		Q_bLED_Green	:=	TRUE;
+		Q_bLED_Blue	:=	FALSE;
+
+		Q_dwColor		:=	stColor.Gruen;
+
+Blue:	Q_bLED_Red	 := 	FALSE;
+		Q_bLED_Green	:=	FALSE;
+		Q_bLED_Blue	:=	TRUE;
+
+		Q_dwColor		:=	stColor.Blau;
+
+Pink:	Q_bLED_Red	 := 	TRUE;
+		Q_bLED_Green	:=	FALSE;
+		Q_bLED_Blue	:=	TRUE;
+
+		Q_dwColor		:=	stColor.Pink ;
+
+Yellow:	Q_bLED_Red	 := 	TRUE;
+		Q_bLED_Green	:=	TRUE;
+		Q_bLED_Blue	:=	FALSE;
+
+		Q_dwColor		:=	stColor.Gelb;
+
+Cyan:	Q_bLED_Red	 := 	FALSE;
+		Q_bLED_Green	:=	TRUE;
+		Q_bLED_Blue	:=	TRUE;
+
+		Q_dwColor		:=	stColor.HellBlau;
+END_CASE]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="ac_RGBTest" Id="{71579199-7905-4bd0-a4a7-728aebc2b82c}">
+      <Implementation>
+        <ST><![CDATA[CASE iStepTest OF
+
+	0:	tonStepTest.IN 	:= TRUE;
+		COLOR := White;
+
+		IF	tonStepTest.Q
+		THEN
+			iStepTest := iStepTest +1;
+		END_IF
+
+	1:	tonStepTest.IN	:= FALSE;
+		iStepTest := iStepTest +1;
+
+	2:	tonStepTest.IN	:= TRUE;
+		COLOR := Red;
+
+		IF	tonStepTest.Q
+		THEN
+			iStepTest := iStepTest +1;
+		END_IF
+
+	3:	tonStepTest.IN 	:= FALSE;
+		iStepTest := iStepTest +1;
+
+	4:	tonStepTest.IN 	:= TRUE;
+		COLOR := Green;
+
+		IF	tonStepTest.Q
+		THEN
+			iStepTest := iStepTest +1;
+		END_IF
+
+	5:	tonStepTest.IN 	:= FALSE;
+		iStepTest := iStepTest +1;
+
+	6:	tonStepTest.IN 	:= TRUE;
+		COLOR := Blue;
+
+		IF	tonStepTest.Q
+		THEN
+			iStepTest := iStepTest +1;
+		END_IF
+
+	7:	tonStepTest.IN 	:= FALSE;
+		iStepTest := iStepTest +1;
+
+	8:	tonStepTest.IN 	:= TRUE;
+		COLOR := Yellow;
+
+		IF	tonStepTest.Q
+		THEN
+			iStepTest := iStepTest +1;
+		END_IF
+
+	9:	tonStepTest.IN 	:= FALSE;
+		iStepTest := iStepTest +1;
+
+	10:	tonStepTest.IN	:= TRUE;
+		COLOR := Cyan;
+
+		IF	tonStepTest.Q
+		THEN
+			iStepTest := iStepTest +1;
+		END_IF
+
+	11:	tonStepTest.IN 	:= FALSE;
+		iStepTest := iStepTest +1;
+
+	12:	tonStepTest.IN	:= TRUE;
+		COLOR := Pink;
+
+		IF	tonStepTest.Q
+		THEN
+			iStepTest := iStepTest +1;
+		END_IF
+
+	13:	tonStepTest.IN	:= FALSE;
+		iStepTest :=0;
+END_CASE]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="fb_RGB_Button">
+      <LineId Id="32" Count="40" />
+    </LineIds>
+    <LineIds Name="fb_RGB_Button.ac_Outputs">
+      <LineId Id="0" Count="53" />
+    </LineIds>
+    <LineIds Name="fb_RGB_Button.ac_RGBTest">
+      <LineId Id="0" Count="78" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
