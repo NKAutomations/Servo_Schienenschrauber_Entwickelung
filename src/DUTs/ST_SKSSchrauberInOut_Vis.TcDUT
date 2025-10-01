@@ -44,11 +44,14 @@ STRUCT
 	
 	Q_nLastTorque					:LREAL;
 	Q_nLastDepth					:LREAL;
+	Q_nLastAngle					:LREAL;
 	
 	Q_nStep							: INT;
 	
 	Q_strStep						: STRING;
 	Q_sStatus						: STRING(255);	//Informationen zu dem aktuellen Ablaufschritt
+	
+	
 	
 END_STRUCT
 END_TYPE
