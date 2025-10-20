@@ -45,6 +45,8 @@ mit NC-Achsenanbindung, Drehmoment, Drehwinkel- und Tiefenüberwachung
 (*13/10/2025   	| 3.03      		| TC3		  		| N.Kersting       	| Drehmomentmittelwert nun aus nur 3 Werten um weniger Verzögerung zu bekommen  *)
 (*14/10/2025   	| 3.04      		| TC3		  		| N.Kersting       	| Einige Parameter entfernt und neue Interne Parameter hinzugefügt inkl Nachziehen  *)
 (*15/10/2025   	| 4.00      		| TC3		  		| N.Kersting       	| Auswertung Komplett überarbeitet, Parameter besser unterteilt wieder 5 werte bei Drehmoment Mittelwert  *)
+(*20/10/2025   	| 4.01      		| TC3		  		| N.Kersting       	| Bugfixe Fehlermeldungen ergänzt und besser beschrieben  *)
+(*20/10/2025   	| 4.02      		| TC3		  		| N.Kersting       	| Neu: Drehmoment erhöhen nach erreichen des Drehmoments um den Schraubfall sicher zu erkennen  *)
 (*====================================================================================================================================================*)
 FUNCTION_BLOCK fb_SKSSchraubNob
 VAR_INPUT
@@ -64,7 +66,7 @@ VAR_OUTPUT
 	Q_bDone				:BOOL;
 	Q_bError			:BOOL;
 	Q_nErrorId			:INT;
-	Q_bSchrHalt			:BOOL;		(* Motor stoppen *)
+	Q_bSchrHalt			:BOOL;				(* Motor stoppen *)
 	Q_bAxisReset		:BOOL;				(* Achse zurücksetzen *)
 	Q_nTorque			:INT := 300;		(* Drehmomentgrenzwert [0.1%] *)
 	
@@ -162,11 +164,31 @@ VAR
 	(*========================================================================================================================*)
 	(* === Interne Parameter Schrauberablauf === *)
 	(*========================================================================================================================*)
-	bDrehwinkelPruefbeiAuswertung	: BOOL := TRUE;		(* Aktiviert die Drehwinkelprüfung auch schon, bei der Auswertung des Drehmoments in Schritt 55- Zusätzlioche sicherheit *)
-	bSchraubfallAuswertung			: BOOL := TRUE;		(* Wenn True wird in Step 61 Sobald das Drehmoment und Tiefe Ok sind, eine Tiefenprüfung mit Drehwinkelabhängigkeit durchgeführt *)
-	bTiefenAuswertung				: BOOL := TRUE;		(* Wenn True wird in Step 63 eine reine Tiefenprüfung Durchgeführt, wo ausschließlich die Tiefe in der Toleranz sein muss *)
-	bDrehmomentRedNachDrehmomOk		: BOOL := FALSE;	(* Wenn True wird in Step 55 Sobald das Drehmoment erreicht wurde, das Drehmoment kurz auf 0 Gesetzt *)
-	bNachziehenBeiSchraubfallWeich	: BOOL := FALSE;	(* Wenn True wird in Step 62 nachdem eine Tiefenänderung Festgestellt wird, erneut bei Schritt 60 begonnen um Nachzuziehen *)			
+	(* Aktiviert die Drehwinkelprüfung auch schon, bei der Auswertung des Drehmoments in Schritt 55- Zusätzlioche sicherheit *)
+	bDrehwinkelPruefbeiAuswertung	: BOOL := TRUE;		
+	
+	(*========================================================================================================================*)
+	(* Wenn True wird in Step 61 Sobald das Drehmoment und Tiefe Ok sind, eine Tiefenprüfung mit Drehwinkelabhängigkeit durchgeführt *)
+	bSchraubfallAuswertung			: BOOL := TRUE;		
+	
+	(*========================================================================================================================*)
+	(* Wenn True wird in Step 63 eine reine Tiefenprüfung Durchgeführt, wo ausschließlich die Tiefe in der Toleranz sein muss *)
+	bTiefenAuswertung				: BOOL := TRUE;		
+	
+	(*========================================================================================================================*)
+	(* Wenn True wird in Step 55 Sobald das Drehmoment erreicht wurde, das Drehmoment kurz reduziert *)
+	bDrehmomentRedNachDrehmomOk		: BOOL := FALSE;	
+	
+	(*========================================================================================================================*)
+	(* Wenn True wird in Step 62 nachdem eine Tiefenänderung Festgestellt wird, erneut bei Schritt 60 begonnen um Nachzuziehen *)			
+	bNachziehenBeiSchraubfallWeich	: BOOL := FALSE;	
+	
+	(*========================================================================================================================*)
+	(* Wenn True wird nach dem erreichen des Drehmoment, das Drehmoment nochmals erhöht um eine Sichere Schraubfallauswertung zu bekommen, 
+		es macht allerdings nur sinn, wenn der Motor bzw. die Klemme genug reserven liefert und die "bSchraubfallAuswertung" Aktiv ist. 
+		Nachteil: Schraubzeit vergößert sich um ca. 50ms *)
+	bDrehmomentErhoehNachDrehmomOk	: BOOL := TRUE;		
+	
 END_VAR
 ]]></Declaration>
     <Implementation>
@@ -210,6 +232,18 @@ sStep := 'Schraubvorgang Auswertung Drehwinkel und Drehmoment';
 tonTimeOver.IN := 	TRUE;
 tonTimeOver.PT :=	I_stSchraubParam.tZeitdSchraubfallTimeout;
 
+(* Drehmoment Vorgabe errechnen für erhöhung des Drehmoments um ein Weiterdrehen zu erzwingen!-> Schraubfall kann besser ausgewertet werden*)
+IF bDrehmomentErhoehNachDrehmomOk
+THEN
+	m_DrehmomentVorgabe(
+		nSkalierung :=			I_stSchraubParam.nDrehmomentSkalierVorgabe,
+		nTorque:= 				I_stSchraubParam.nDrehmomentMax * I_stSchraubParam.nDrehmomentSkalierVorgabe, 
+		nRatedCurrentMotor:= 	I_stSchraubParam.nNennleistungMotor, 
+		nTorqueConstant:= 		I_stSchraubParam.nDrehmomentKonstante, 
+		nTorqueLimitation=> 	nSollDrehmomentErrechnet);
+END_IF
+
+			
 Q_nTorque := LREAL_TO_INT(nSollDrehmomentErrechnet );	(* Drehmoment wieder Setzen damit der Motor weiter drehen kann *)
 
 (* Aufruf Drehwinkel Prüfen *)
@@ -261,8 +295,19 @@ THEN
 	THEN
 		(* Wenn Drehwinkel Überschritten-> Direkt Anhalten *)
 		tonTimeOver.IN := 	FALSE;
-		nStep := 70;	(* -> Motor stoppen *)
-		nFehlerSchrittMerker := -1261;	(* Fehlercode merken Drehwinkel Überschritten Fall 1*)			
+		
+		IF bSchraubfallAuswertung
+			AND bDrehmomOkMem
+		THEN
+			Q_nTorque := 0;
+			nStep := 62;	(* Weil das Drehmoment noch Ok ist, kann nun der Schraubfall ausgewertet werden, damit wir eine bessere Aussage erhalten, was los war *)
+			nFehlerSchrittMerker := -1261;	(* Fehlercode merken Drehwinkel Überschritten Fall 1*)	
+		ELSE
+			nStep := 70;	(* Motor Stoppen *)
+			nFehlerSchrittMerker := -1261;	(* Fehlercode merken Drehwinkel Überschritten Fall 1*)	
+		END_IF
+			
+		
 	END_IF
 ELSE
 	nFehlerSchrittMerker := -61;
@@ -299,7 +344,7 @@ m_TiefenAenderung(
 	nTiefeStreckeIst:= 		ABS(fSchraubTiefeIst) -ABS(nAuswertungTiefeMem), 
 	nDrehwinkelIst:= 		nDrehwinkelMem, 
 	nSteigungSchraube:= 	I_stSchraubParam.nHoeheSchraubenDrehung, 
-	nAbweichung:= 			25, (* 25 Prozent Abweichung *)
+	nAbweichung:= 			90, (* 60 Prozent Abweichung *)
 	nTiefeErrechnet=> 		nTiefErrechnetMem, 
 	nProzentAbweichung=>	nTiefeAbweichMem,
 	bTiefeSteht=> 			bTiefeStehtOkMem);
@@ -484,7 +529,7 @@ THEN
 		(* Drehmoment Vorgabe errechnen *)
 		m_DrehmomentVorgabe(
 			nSkalierung :=			I_stSchraubParam.nDrehmomentSkalierVorgabe,
-			nTorque:= 				I_stSchraubParam.nDrehmomentSoll * I_stSchraubParam.nDrehmomentSkalierVorgabe, (* Drehmoment erst Senken um Überdrehen zu verhinder *) 
+			nTorque:= 				I_stSchraubParam.nDrehmomentSoll * I_stSchraubParam.nDrehmomentSkalierVorgabe, 
 			nRatedCurrentMotor:= 	I_stSchraubParam.nNennleistungMotor, 
 			nTorqueConstant:= 		I_stSchraubParam.nDrehmomentKonstante, 
 			nTorqueLimitation=> 	nSollDrehmomentErrechnet);
@@ -627,7 +672,7 @@ THEN
 		m_DrehmomentPruefung(
 			nDrehmomentSoll:= 		I_stSchraubParam.nDrehmomentSoll, 
 			bDrehmomentOk=> 		bDrehmomOkMem);
-		
+					
 		IF fSchraubTiefeIst < I_stSchraubParam.nTiefeLangsamDrehzahl
 			OR bDrehmomOkMem	(* Nun auch schon vorher gucken ob das Drehmoment nicht doch schon kommt um Drehzahl zu Reduzieren *)
 		THEN
@@ -853,8 +898,18 @@ THEN
 		
 (*================================================================================================================*)
 	-50: (* === FEHLER: SCHRAUBTIEFE FÜR SOLLDREHZAHL === *)
-		sStep := 'FEHLER: Schraubtiefe für Solldrehzahl wird nicht erreicht';
+		sStep := 'FEHLER: Timeout Schraubtiefe für Solldrehzahl wird nicht erreicht';
 		Q_nErrorId := -50;
+		
+		IF I_bQuittFehler 
+		THEN
+			nStep := 100;	(* -> Beenden *)
+		END_IF
+		
+(*================================================================================================================*)
+	-51: (* === FEHLER: SCHRAUBTIEFE FÜR SOLLDREHZAHL === *)
+		sStep := 'FEHLER: Timeout Schraubtiefe für Langsame Drehzahl wird nicht erreicht';
+		Q_nErrorId := -51;
 		
 		IF I_bQuittFehler 
 		THEN
@@ -882,7 +937,7 @@ THEN
 		
 (*================================================================================================================*)		
 	-60: (* === FEHLER:  === *)
-		sStep := 'FEHLER: Timeout abbremsen';
+		sStep := 'FEHLER: Timeout abbremsen auf langsame Drehzahl';
 		Q_nErrorId := -60;
 		
 		IF I_bQuittFehler 
@@ -894,7 +949,7 @@ THEN
 (* === FEHLER: Schraubfall 1  === *)		
 (*================================================================================================================*)
 	-61: 
-		sStep := 'FEHLER: Schraubfall Undefiniert- Timeout';
+		sStep := 'FEHLER: Timeout Schraubfall Undefiniert ';
 		Q_nErrorId := -61;
 		
 		IF I_bQuittFehler 
@@ -924,7 +979,7 @@ THEN
 
 (*================================================================================================================*)
 	-63: 
-		sStep := 'FEHLER: Undefiniert Timeout Tiefe prüfen';
+		sStep := 'FEHLER: Timeout Tiefe prüfen - Undefiniert';
 		Q_nErrorId := -63;
 		
 		IF I_bQuittFehler 
@@ -1019,67 +1074,143 @@ Q_stProzessDaten.bPD_TiefeOk				:=	bTiefeOkMem;
     <Action Name="ac99_Doku" Id="{4b2e4e7e-3f57-4148-b830-7a58c66f56ce}">
       <Implementation>
         <ST><![CDATA[(*
-Kurzüberblick
+Ziel und Grundprinzip
 
-Dieser Baustein übernimmt den reinen Motor-Schraubprozess: Drehzahlführung, Momentbegrenzung, Überwachung von zusätzlich gedrehtem Winkel, Tiefe und Zeiten.
-Das Umfeld (Positionierung, Zuführung, Pneumatik) bleibt im bestehenden PnP-Baustein.
-Ergebnis sind klare Prozessdaten (Tiefe, maximales Moment, gedrehter Winkel, Zeiten, Verlaufsklasse/„Schraubfall“) und ein OK/NOK.
-Ablauf in verständlichen Phasen
+Der Baustein steuert ausschließlich den Motor für den Schraubvorgang. Pneumatik und Zuführung liegen außerhalb.
+Der Ablauf ist als klar strukturierte Zustandsmaschine aufgebaut, mit Zeitüberwachungen und sauberer Fehlerbehandlung.
+Entscheidend sind drei Phasen:
+kontrollierter Anlauf und Hochlauf,
+Erreichen und Sichern des Anzugsmoments mit Winkel- und Tiefen-Checks,
+geordneter Stopp und Abschluss- oder Fehlerauswertung.
+Ablauf in Schritten (ohne Variablennamen)
 
-Bereit/Start
-Der Baustein nimmt die Parametervorgaben an, setzt interne Merker zurück und wartet auf Start und Freigaben.
-Sanftes Anlaufen
-Es wird mit niedriger Drehzahl begonnen, um sauber anzusetzen.
-Ein interner Timer überwacht, ob die Drehzahl in sinnvoller Zeit erreicht wird. Wird sie nicht erreicht, wird abgebrochen.
-Hochdrehen
-Danach wird auf Arbeitsdrehzahl beschleunigt, solange die Einschraubtiefe dies zulässt.
-Wird die definierte Umschalttiefe erreicht, geht es weiter.
-Absenken für die sensible Zone
-Vor der finalen Beurteilung wird die Drehzahl wieder reduziert, um kontrolliert in den Setzbereich zu fahren.
-Kommt das Zielmoment schon früher, wird ebenfalls in die reduzierte Drehzahl gewechselt, um nicht zu „hart“ einzuziehen.
-Entscheidungspunkt: Drehmoment erreicht?
-In der aktuellen Logik ist das Drehmoment der entscheidende Trigger: Sobald es erreicht ist, wird die Feinbewertung aktiviert.
-An diesem Punkt werden die aktuelle Position und Tiefe als Referenz gemerkt.
-Neue Auswertung in 3.01 (nach Moment-OK) Das ist der wesentliche Unterschied zur alten Beschreibung:
-Nach Moment-OK wird NICHT mehr „pauschal tiefer“ gedreht mit zusätzlicher Reservestrategie, sondern: a) Es wird ein Fenster für einen maximal zulässigen zusätzlichen Drehwinkel gesetzt. b) Gleichzeitig wird darauf gewartet, dass die Spindel faktisch zum Stillstand kommt (sehr niedrige Restdrehzahl). Das ist ein typisches Zeichen, dass der Schraubenkopf anliegt und der Setzvorgang abgeschlossen ist. c) Diese Wartephase ist zeitlich begrenzt. Wird weder Stillstand erreicht, noch bleibt man innerhalb des Winkel-Fensters, wird abgebrochen:
-Zeit überschritten → Fehler (Timeout dieser Bewertungsphase)
-Winkelobergrenze überschritten → Fehler (Schutz vor Überdrehen)
-Plausibilitätsprüfung Tiefe vs. Winkel (kurzes Beobachtungsfenster)
-Unmittelbar nach dem Erkennen „Spindel steht“ folgt eine sehr kurze Zusatzprüfung:
-Aus dem gedrehten Winkel und der Gewindesteigung ergibt sich eine erwartete Tiefenänderung.
-Real gemessene Tiefenänderung wird dagegen gehalten. In dieser letzten, sehr kurzen Beobachtungszeit (ca. 100 ms) soll sich die Tiefe praktisch nicht mehr verändern („steht“).
-Wenn die Tiefe in diesem Fenster „steht“, ist das ein starker Hinweis, dass der Kopf anliegt und nichts mehr nachgibt → Stopp und weiter zum Abschluss.
-Wenn die Tiefe sich in diesem Fenster unerwartet weiter verändert, wird aktuell mit Fehler abgebrochen. (Das ist als Sicherheitslogik ausgelegt; spätere Erweiterungen könnten hier adaptiver reagieren.)
-Stoppen und Stillsetzen
-Der Antrieb wird gestoppt, kurz auf sicheren Stillstand gewartet und anschließend das Ergebnis bewertet (OK oder Fehlercode).
-Nach Loslassen des Startsignals kehrt der Baustein in Bereitschaft zurück.
-Zusatz: Leerlauf-/Schwergangprüfung (separate Sequenz)
+Schritt 0 – Initialisierung
 
-Optional kann vorab geprüft werden, ob die Achse mit stark begrenztem Moment die erwartete Drehzahl erreicht.
-Wird diese „freie“ Drehzahl nicht erreicht, gibt es einen Fehlerhinweis auf Schwergang/Blockade.
-Wie die Bewertung technisch gedacht ist
+Setzt den Motor-Drehmomentgrenzwert auf einen berechneten Wert (physikalisches Moment → Antriebsgrenze).
+Wartet auf die Freigabe.
+Schritt 10 – Bereitschaft
 
-Drehmoment-Trigger: Signalisiert, dass die Verbindung „zieht“. Ab hier misst das System den zusätzlich gedrehten Winkel und schützt diesen Bereich durch eine Obergrenze.
-Spindel-Standstill: Erst wenn die Drehbewegung praktisch zum Erliegen kommt (untere Geschwindigkeitsgrenze), gilt der Setzpunkt als erreicht – aber noch nicht endgültig OK.
-Tiefe-gegen-Winkel-Plausibilität: In einem sehr kurzen Nachfenster muss die Tiefe „stehen“. Das verhindert, dass unerkannte Relativbewegungen (Material setzt noch stark nach, schleichendes Rutschen etc.) als OK gewertet werden.
-Zeitwächter: Jede kritische Phase hat ein Timeout, damit der Prozess nie unkontrolliert „hängen“ bleibt.
-Drehzahlüberwachung: Beim Anlaufen/Umschalten wird geprüft, ob die Achse realistisch der Vorgabe folgt (z. B. grob 80%-Schwelle vom Soll), um Blockaden früh zu erkennen.
-Glättung des Moments: Das Moment wird gemittelt, um nicht auf kurzzeitige Spitzen zu reagieren und die Prozessdaten robuster zu machen.
-Ergebnisse, die zurückgegeben werden
+System ist betriebsbereit, Drehmomentgrenze ist gesetzt.
+Bei Start werden Prozessdaten/Zwischenspeicher zurückgesetzt und es geht in den Ablauf.
+Schritt 45 – Anlauf (langsame Drehzahl)
 
-Erreichte minimale Tiefe (je nach Achsrichtung typischerweise der kleinste Wert).
-Höchstes gemitteltes Drehmoment im Verlauf.
-Größter zusätzlich gedrehter Winkel ab dem Moment-OK.
-Gesamtzeit und reine Schraubzeit.
-Verlaufsklasse („Schraubfall“, in dieser Version primär der Pfad „Moment zuerst, Tiefe folgt/steht“).
-Qualitätsflags: Gesamt-OK, Moment-OK, Winkelkriterium erfüllt, Tiefenkriterium erfüllt.
-Fehlerfälle (aus Anwendersicht)
+Der Motor fährt mit einer niedrigen Startdrehzahl an.
+Es wird innerhalb eines kurzen Zeitfensters überprüft, ob ca. 80 % der Zielgeschwindigkeit erreicht werden. Sonst Abbruch mit Fehler.
+Schritt 50 – Hauptschraubphase (Hochlauf)
 
-„Anlauf-/Drehzahl nicht erreicht“: Hinweis auf Reibung/Blockade oder falsche Freigaben.
-„Umschaltung/Taktfenster überschritten“: Drehzahl-/Tiefe-Kriterium kam nicht rechtzeitig.
-„Maximaler Nachdrehwinkel überschritten“: Schutz vor Überdrehen nach Moment-OK.
-„Plausibilität Tiefe vs. Winkel nicht erfüllt“: Tiefe steht nicht, obwohl Setzpunkt erwartet – Sicherheitsabbruch.
-„Timeout in der Auswertungsphase nach Moment-OK“: Weder Stillstand noch sauberes Beenden erkannt.
+Umschalten auf die Hauptdrehzahl.
+Abhängig von der gemessenen Tiefe (Schraubweg) wird in die nächste Phase gewechselt. Wird die Umschalttiefe zu langsam erreicht, erfolgt ein Timeout-Fehler.
+Schritt 51 – Drehzahl absenken
+
+Vor dem Anziehen wird die Drehzahl reduziert (feineres Anzugverhalten).
+Parallel wird bereits geprüft, ob das Zielmoment eventuell schon anliegt.
+Sobald die tatsächlich erreichte Drehzahl merklich unter der Sollvorgabe liegt (gezielt verlangsamt), wird eine Winkel-Referenz gesetzt (Position merken) und zur Anzugsauswertung gewechselt. Bei Timeout Fehler.
+Schritt 55 – Warten auf Anzugsmoment (mit optionaler Winkel-Vorprüfung)
+
+Es wird innerhalb eines vorgegebenen Zeitfensters darauf gewartet, dass das Zielmoment erreicht wird.
+Optional wird in dieser Phase schon eine Winkelobergrenze überwacht, um ein Überdrehen gleich zu verhindern.
+Sobald das Zielmoment anliegt, wird auf eine niedrigere Drehzahl begrenzt und zur eigentlichen Auswertung weitergeschaltet. Kommt das Moment nicht, oder wird der zulässige Winkel überschritten, folgt Abbruch mit Fehler.
+Schritt 60 – Abbremsen und Merken der Referenz
+
+Warten, bis die reduzierte Drehzahl tatsächlich gefahren wird.
+Genau an dieser Stelle werden Position und Tiefe als Referenz für die Auswertung festgehalten. Bei Timeout Fehler.
+Schritt 61 – Auswertung „Anzugswinkel + Moment + Stillstand“
+
+Es wird ein Winkel-Fenster nach dem Anziehen vorgegeben: Der Schrauber darf sich nur noch begrenzt weiterdrehen.
+Gleichzeitig wird geprüft, ob die Spindel faktisch zum Stillstand kommt (sehr geringe Restdrehzahl).
+Wenn beides innerhalb der Zeit passt, wird das Drehmoment wieder herausgenommen und es geht weiter:
+entweder in die „Schraubfall“-Auswertung (hart/weich),
+oder direkt zur Tiefenprüfung bzw. zum Stopp – je nach Konfiguration.
+Wird der Winkel überschritten oder das Zeitfenster gerissen, wird abgebrochen und gestoppt.
+Schritt 62 – Schraubfall (hart/weich) über Tiefenänderung
+
+Kurz nach Stillstand wird für sehr kurze Zeit geprüft, ob sich die Tiefe praktisch nicht mehr ändert.
+Aus dem gemessenen Winkel und der bekannten Steigung der Schraube ergibt sich eine erwartete Tiefenänderung; die tatsächliche Änderung wird dagegen geprüft.
+Wenn die Tiefe „steht“, gilt das als harter Schraubfall (Metall-Schiene → gewünscht) und es geht weiter. Wenn sich die Tiefe noch ändert, ist das ein weicher Schraubfall (für diese Anwendung unerwünscht) → Fehler oder optionales „Nachziehen“ (wenn aktiviert).
+Schritt 63 – Reine Tiefenprüfung
+
+Hier wird ausschließlich geprüft, ob die erreichte Tiefe innerhalb der vorgegebenen Toleranz liegt (ohne weitere Winkelbetrachtung).
+Zu flach, zu tief oder Timeout → Fehler. Wenn OK → weiter.
+Schritt 70 – Motor stoppen
+
+Drehmomentbegrenzung raus, Antrieb stoppen, dann Richtung Stillstand übergehen.
+Schritt 75 – Stillstand abwarten
+
+Kurzes Zeitfenster, bis Stillstand sicher ist. Danach Achs-Reset vorm Abschluss.
+Schritt 80 – Fehlerauswertung
+
+Wenn zuvor ein Fehler markiert wurde, springt das Programm in den jeweiligen Fehlerzustand (siehe unten „Fehlerbilder“).
+Andernfalls gilt der Schraubvorgang als OK und es geht weiter.
+Schritt 100 – Vorgang OK
+
+Fertig-Status. Wartet auf Start-Freigabe AUS, dann geht’s zurück in die Bereitschaft.
+Separat: Leerlaufprüfung (Schritte 300/301)
+
+Optionaler Zweig: Mit kleinem Moment wird geprüft, ob der Antrieb die erwartete Drehzahl erreicht (Erkennung von Schwergang).
+Kommt der Antrieb nicht auf Drehzahl oder fehlt die Positionierfreigabe, wird das als Fehler erkannt und abgebrochen.
+Was gemessen und protokolliert wird
+
+Tiefster erreichten Schraubweg während des Anziehens.
+Maximaler (geglätteter) Drehmomentwert.
+Drehwinkel beim Anziehen (beim Erreichen des Anzugsmoments).
+Zeiten: Gesamtdauer und reine Schraubdauer (ohne Zylinder etc.).
+Ergebnisflag „Schraubvorgang OK/Fehler“.
+Wie die Parameter zu verwenden sind (ohne Namen, in Funktion erklärt)
+
+Drehzahlen
+Anlauf-Drehzahl: eher niedrig, um sauber anzusetzen.
+Haupt-Drehzahl: für den schnellen Schraubvorschub bis kurz vor Anziehen.
+End-Drehzahl (reduziert): kurz vor dem Anzug, um dynamische Überschwinger zu vermeiden.
+Umschalttiefe: Tiefe (Weg), bei der von schnell auf langsam umgeschaltet wird. Zu früh = langsamer Takt, zu spät = Risiko von zu hartem Anschlag.
+Drehmoment
+Ziel-Anzugsmoment: physikalischer Zielwert (z. B. in Nm). Der Baustein rechnet daraus eine Antriebsgrenze.
+Optional: reduziertes Moment nach „Moment erreicht“ (für schnelleren Stillstand). Das macht den Stopp sauberer, nur einsetzen wenn der Antrieb nicht eigenständig gut abbremst.
+Leerlaufmoment (nur für die Leerlaufprüfung): klein halten, nur so groß wie nötig, um die Drehzahl in Leerlauf zu erreichen.
+Winkelgrenzen
+Vor dem Moment (optional): maximale zusätzliche Drehung, bevor das Moment erreicht sein muss. Schützt vor „leer drehen“.
+Nach dem Moment: maximal erlaubte Zusatzdrehung bis zum Stillstand. Sichert, dass nach Anziehen nicht unverhältnismäßig weitergedreht wird.
+Praxis-Hinweis: Für Metallschienen konservativ einstellen; lieber etwas kleiner als zu großzügig.
+Tiefe (Weg)
+Solltiefe und Toleranz: In mm, bezogen auf die Messung der Schraubtiefe. Toleranzen realistisch wählen (mechanisches Spiel, Messauflösung).
+Schraubensteigung: mm pro Umdrehung. Wird gebraucht, um die erwartete Tiefenänderung aus dem Winkel abzuleiten (Erkennung „hart/weich“).
+Hinweis: Wird bei der „hart/weich“-Erkennung eine unerwartete Tiefenänderung gesehen, gilt das als weicher Schraubfall (für Schienen in der Regel unerwünscht).
+Zeiten
+Anlauf-/Hochlauf-Überwachung: kurze Zeitfenster, ob Drehzahl erreicht/abgesenkt wurde.
+Auswertungsfenster für das Anzugsmoment: Wann muss das Moment da sein?
+Beobachtungsfenster „hart/weich“: sehr kurz (z. B. ~100 ms), um nach Stillstand die Restbewegung in Tiefe zu beurteilen.
+Reine Tiefenprüfung: kurzes Zeitfenster; wenn innerhalb dessen keine gültige Tiefe erreicht wird → Fehler.
+Stillstand/Stop: sehr kurzes Fenster, dann wird Stillstand abgewartet.
+Motordaten und Umrechnung
+Motorkonstanten (z. B. Drehmomentkonstante, Nennstrom) werden benötigt, um aus physikalischen Momentwerten eine zur Antriebsregelung passende Begrenzung zu berechnen.
+Wenn diese Werte nicht passen, sind alle Drehmomentgrenzen verschoben (zu hoch/zu niedrig). Unbedingt korrekt parametrieren.
+Optionen (interne Schalter)
+„Winkel schon während der Moment-Vorprüfung begrenzen“: extra Schutz, falls das Moment zu spät kommt.
+„Nach Moment-OK zusätzlich eine Tiefe-gegen-Winkel-Auswertung“: erhöht Sicherheit, dass der Kopf wirklich anliegt.
+„Reine Tiefenprüfung am Ende“: stellt sicher, dass die Zieltiefe im Toleranzfenster liegt.
+„Moment nach Moment-OK kurz reduzieren“: hilft beim schnellen Ausdrehen/Stillsetzen.
+„Nachziehen bei weichem Schraubfall“: erlaubt wieder in die Auswertung hineinzulaufen, falls die Tiefe noch „wandert“. Für Metallschienen meist AUS lassen.
+Fehlerbilder (was der Ablauf meldet – sinngemäß)
+
+Drehzahl wird nicht rechtzeitig erreicht → Verdacht auf Schwergang, falsche Parametrierung oder fehlende Freigabe.
+Tiefe bis zur Umschaltmarke wird nicht erreicht → Prozess unterbrochen oder mechanisches Problem.
+Anzugsmoment kommt nicht innerhalb der Zeit → Material fehlt, falscher Schrauber, falscher Sitz.
+Zulässiger Winkel überschritten (vor oder nach Moment) → Überdrehen/Leerlauf.
+Weicher Schraubfall (Tiefe ändert sich noch nach Stillstand) → für Schienen unzulässig, typischerweise: Schiene fehlt oder gibt nach.
+Tiefe außerhalb Toleranz (zu flach/zu tief) → Bohrung/Material nicht wie erwartet.
+Inbetriebnahme- und Parametrier-Tipps
+
+Beginnen Sie mit konservativen Grenzen:
+Niedrige Enddrehzahl,
+enges Winkel-Fenster nach Moment,
+eher kleine Tiefentoleranz, dann schrittweise öffnen, bis der Prozess robust aber schnell ist.
+Prüfen Sie zuerst die Leerlaufprüfung, um mechanische Schwergänge auszuschließen.
+Achten Sie darauf, dass die Motorkonstanten korrekt sind – sonst stimmt das „gefühlte“ Moment nie mit der Realität überein.
+Nutzen Sie die Prozessdatenausgabe (max. Moment, Winkel beim Anziehen, Zeiten), um die Parameter zu verifizieren und zu optimieren.
+Für Metallschienen: Die „hart/weich“-Erkennung ist zentral. Wenn diese häufig „weich“ meldet, stimmt meist etwas an Steigung/Material/Mechanik nicht oder die Grenzwerte sind zu streng.
+Kurzfassung der Logik
+
+Schnell hin, langsam anziehen, Moment abwarten, dann mit Winkel- und Tiefenkontrolle absichern, geordnet stoppen, Ergebnis melden.
+Bei jedem kritischen Schritt gibt es eine Zeitüberwachung. Wird sie gerissen oder ein Grenzwert überschritten, stoppt der Motor, es wird sauber stillgesetzt und der Fehler eindeutig klassifiziert.
 *)]]></ST>
       </Implementation>
     </Action>
@@ -1523,7 +1654,13 @@ END_IF]]></ST>
       <LineId Id="73" Count="0" />
       <LineId Id="4" Count="3" />
       <LineId Id="9" Count="0" />
+      <LineId Id="286" Count="1" />
+      <LineId Id="294" Count="1" />
+      <LineId Id="298" Count="4" />
+      <LineId Id="297" Count="0" />
+      <LineId Id="296" Count="0" />
       <LineId Id="90" Count="0" />
+      <LineId Id="293" Count="0" />
       <LineId Id="11" Count="5" />
       <LineId Id="18" Count="2" />
       <LineId Id="265" Count="0" />
@@ -1557,7 +1694,15 @@ END_IF]]></ST>
       <LineId Id="262" Count="0" />
       <LineId Id="59" Count="1" />
       <LineId Id="85" Count="0" />
-      <LineId Id="61" Count="1" />
+      <LineId Id="315" Count="2" />
+      <LineId Id="319" Count="0" />
+      <LineId Id="329" Count="0" />
+      <LineId Id="320" Count="1" />
+      <LineId Id="323" Count="0" />
+      <LineId Id="327" Count="1" />
+      <LineId Id="318" Count="0" />
+      <LineId Id="306" Count="0" />
+      <LineId Id="61" Count="0" />
       <LineId Id="1" Count="0" />
       <LineId Id="94" Count="0" />
       <LineId Id="214" Count="0" />
@@ -1653,13 +1798,20 @@ END_IF]]></ST>
     <LineIds Name="fb_SKSSchraubNob.ac_Hauptablauf">
       <LineId Id="3472" Count="141" />
       <LineId Id="4046" Count="0" />
-      <LineId Id="3614" Count="47" />
-      <LineId Id="3663" Count="365" />
+      <LineId Id="3614" Count="27" />
+      <LineId Id="4047" Count="0" />
+      <LineId Id="3643" Count="18" />
+      <LineId Id="3663" Count="212" />
+      <LineId Id="4071" Count="0" />
+      <LineId Id="4062" Count="7" />
+      <LineId Id="3876" Count="0" />
+      <LineId Id="4070" Count="0" />
+      <LineId Id="3877" Count="151" />
       <LineId Id="1628" Count="0" />
     </LineIds>
     <LineIds Name="fb_SKSSchraubNob.ac99_Doku">
       <LineId Id="60" Count="0" />
-      <LineId Id="323" Count="59" />
+      <LineId Id="383" Count="135" />
       <LineId Id="294" Count="0" />
       <LineId Id="293" Count="0" />
     </LineIds>
