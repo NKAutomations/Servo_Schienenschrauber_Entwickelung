@@ -1,0 +1,101 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="fb_TimeStepUp" Id="{4f1d5501-40be-4c09-ac6b-780c57586417}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK fb_TimeStepUp
+VAR_INPUT
+	I_bExecute		:BOOL;
+	I_nSteps		:LREAL := 0.1;
+	I_nStart		:LREAL := 1;
+	I_nMax			:LREAL := 4;
+	I_tVerz			:TIME := T#10MS;
+END_VAR
+VAR_OUTPUT
+	Q_nActStep		:LREAL;
+END_VAR
+VAR
+	iStep	:INT;
+	tonVerz	:ton;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[tonVerz(
+	PT := I_tVerz);
+
+IF I_bExecute
+THEN
+	CASE iStep OF
+	(*========================================*)
+	0:	(* INIT *)	
+		tonVerz.IN := FALSE;
+		Q_nActStep := I_nStart;
+		iStep := 1;
+		
+	(*========================================*)	
+	1:	(* Step Up *)
+		IF Q_nActStep < I_nMax
+		THEN
+			tonVerz.IN := TRUE;
+			IF tonVerz.Q
+			THEN
+				Q_nActStep := Q_nActStep + I_nSteps;
+				iStep := 2;
+			END_IF
+		ELSE
+			Q_nActStep := I_nMax;
+			iStep := 999;
+		END_IF
+		
+	(*========================================*)	
+	2:	(* ZURÜCK *)
+		tonVerz.IN := FALSE;
+		iStep := 1;
+		
+	(*========================================*)	
+	999:(* ENDE *)	
+		
+	END_CASE
+ELSE
+	iStep := 0;
+	Q_nActStep := I_nStart;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="fb_TimeStepUp">
+      <LineId Id="30" Count="0" />
+      <LineId Id="32" Count="0" />
+      <LineId Id="31" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="20" Count="0" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="38" Count="0" />
+      <LineId Id="28" Count="0" />
+      <LineId Id="45" Count="0" />
+      <LineId Id="33" Count="1" />
+      <LineId Id="59" Count="0" />
+      <LineId Id="39" Count="0" />
+      <LineId Id="36" Count="0" />
+      <LineId Id="46" Count="0" />
+      <LineId Id="42" Count="0" />
+      <LineId Id="44" Count="0" />
+      <LineId Id="50" Count="1" />
+      <LineId Id="53" Count="0" />
+      <LineId Id="56" Count="0" />
+      <LineId Id="52" Count="0" />
+      <LineId Id="47" Count="0" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="43" Count="0" />
+      <LineId Id="60" Count="0" />
+      <LineId Id="41" Count="0" />
+      <LineId Id="57" Count="1" />
+      <LineId Id="61" Count="1" />
+      <LineId Id="40" Count="0" />
+      <LineId Id="49" Count="0" />
+      <LineId Id="54" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="22" Count="0" />
+      <LineId Id="35" Count="0" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="21" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
