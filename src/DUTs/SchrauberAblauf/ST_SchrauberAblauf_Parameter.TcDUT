@@ -9,46 +9,32 @@ STRUCT
 	(* === Drehzahl Parameter  === *)
 	nDrehzahlSoll					: LREAL := 1200;	(* Solldrehzahl während Schraubprozess *)
 	nDrehzahlSollAnfang				: LREAL := 250;		(* Solldrehzahl am Anfang *)
-	nDrehzahlSollEnde				: LREAL := 300;		(* Solldrehzahl am Ende *)
+	nSollDrehzahlNachziehen			: LREAL := 300;
 	
 	(* === Zeiten  === *)
 	tSchraubfallAuswertung			: TIME := T#750MS;
 	tZeitdSchraubTakt				: TIME := T#2S;
+	tZeitdSchraubfallTimeout		: TIME := T#250MS;
 	
 	(* === Drehmoment Parameter === *)
 	nDrehmomentKonstante			: LREAL	:= 0.2;		(*0x8011:16	*)
 	nNennleistungMotor				: LREAL	:= 4;		(*0x8011:12	*)
 	nDrehmomentSkalierVorgabe		: LREAL := 1.25;	(* 10% Mehr Drehmoment als das Solldrehmoment *)
-	nDrehmomentErhoehung			: LREAL := 0.4;		(* Wird auf das Sollmoment addiert um bei nicht erreichen der Tiefe, zu reagieren und Tiefer zu kommen *)
-	nDrehmomentSkalVerringern		: LREAL := 0.85;	(*  *)
 	nDrehmomentSoll					: LREAL := 1.4;		(* Soll Drehmoment *)
+	nDrehmomentMax					: LREAL := 1.7;		(* Soll Maximal Drehmoment zur Erhöhung *)
 	
-	(* === Tiefen Parameter === *)
-	nMinimalAufsetztiefe			: LREAL := 10;		(* MinimalTiefe für Aufsetzen OK *)
-	nMinimalAufsetztiefeToleranz	: LREAL := 5;		(* MinimalTiefe Toleranz für Aufsetzen OK *)
-	nMinimalSchraubtiefe			: LREAL := -10;
-	nMinimalSchraubtiefeHalb		: LREAL := 10;
-	
+	(* === Tiefen Parameter === *)	
 	nSchraubtiefeSoll				: LREAL := -2;		(* Soll Schraubtiefe *)
-	nTiefeSollDrehzahl				: LREAL := 8;
-	nTiefeLangsamDrehzahl			: LREAL := 0.5;
+	nSchraubtiefeToleranz			: LREAL := 1;		(* Toleranz bei der Tiefenauswertung *)
+	nTiefeSollDrehzahl				: LREAL := 8;		(* Bei dieser Tiefe soll auf die Solldrehzahl erhöht werden  *)
+	nTiefeDrehmom					: LREAL := 0.5;		(* Bei dieser wird der erste Drehmomentanstieg erwartet *)
 	
 	(* === Drehwinkelprüfung Parameter === *)
-	nSollDrehwinkelNachTiefeOK		: LREAL := 5;		
-	nMaxDrehwinkelNachTiefeOk_F1	: LREAL := 720;		(* 2 Umdrehungen	*)
-	nMaxDrehwinkelNachTiefeOk_F2	: LREAL := 180;		(* 1/2 Umdrehungen	*)
-	nDrehwinkelNachziehen_F1		: LREAL := 180;		(* NachziehDrehwinkel, nachdem der drehwinkel berechnet wurde im Fall 1 *)
+	nMaxDrehwinkelDrehmomAuswert	: LREAL := 720;		(* Maximaler Drehwinkel, der beim Warten auf das Drehmoment in Schritt 55 erreicht werden darf *)
+	nMaxDrehwinkelNachDrehmOk		: LREAL := 180;		(* 2 Umdrehungen	*)
 	
 	(* === Schrauben berechnung === *)
 	nHoeheSchraubenDrehung			: LREAL := 1.6;		(* SchraubenUmdrehung ca. 1.6mm Tiefe = 360°*)
-	
-	(* === DrehzahlReduktions Parameter === *)
-	nSkalDrehzReduzHalb				: LREAL := 0.5;		(* Drehzahlreduzierung für Halbschraubung *)
-	
-	(* === Leerlauf Drehmoment Überprüfung === *)
-	nSollmomentLeerlaufPruefung		: LREAL := 0.07;
-	bLeerlaufPruefungAktiv			: BOOL 	:= TRUE;	(* Leerlaufprüfung aktivieren *)
-	tLeerlaufPruefzeit				: TIME 	:= T#250MS;
 	
 END_STRUCT
 END_TYPE
