@@ -36,6 +36,9 @@ STRUCT
 	(* === Schrauben berechnung === *)
 	nHoeheSchraubenDrehung			: LREAL := 1.6;		(* SchraubenUmdrehung ca. 1.6mm Tiefe = 360°*)
 	
+	(* === Schrauben Drehmoment Automatisch Testen === *)
+	bAutoTestDrehmoment				: BOOL	:= FALSE;
+	
 END_STRUCT
 END_TYPE
 ]]></Declaration>
